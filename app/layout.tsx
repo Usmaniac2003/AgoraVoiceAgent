@@ -1,5 +1,11 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import './globals.css';
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+};
 
 export const metadata: Metadata = {
   title: 'Converse with AI',
@@ -25,11 +31,6 @@ export const metadata: Metadata = {
       },
     ],
   },
-  viewport: {
-    width: 'device-width',
-    initialScale: 1,
-    maximumScale: 1,
-  },
 };
 
 export default function RootLayout({
@@ -39,7 +40,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body suppressHydrationWarning={true}>{children}</body>
     </html>
   );
 }

@@ -44,6 +44,31 @@ pnpm dev
 
 4. Open your browser and navigate to `http://localhost:3000` to see the application in action.
 
+## Voice Options
+
+### Microsoft TTS
+
+Male voices:
+
+- en-US-AndrewMultilingualNeural (default)
+- en-US-ChristopherNeural (casual, friendly)
+- en-US-GuyNeural (professional)
+- en-US-JasonNeural (clear, energetic)
+- en-US-TonyNeural (enthusiastic)
+
+Female voices:
+
+- en-US-JennyNeural (assistant-like)
+- en-US-AriaNeural (professional)
+- en-US-EmmaNeural (friendly)
+- en-US-SaraNeural (warm)
+
+Try voices: https://speech.microsoft.com/portal/voicegallery
+
+### ElevenLabs
+
+Try voices: https://elevenlabs.io/app/voice-lab
+
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.

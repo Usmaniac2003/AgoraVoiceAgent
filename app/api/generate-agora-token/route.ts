@@ -29,6 +29,9 @@ export async function GET(request: NextRequest) {
   // Use provided channel name or generate new one
   const channelName = searchParams.get('channel') || generateChannelName();
 
+  const expirationTime =
+    Math.floor(Date.now() / 1000) + EXPIRATION_TIME_IN_SECONDS;
+
   try {
     console.log('Building token with UID:', uid, 'Channel:', channelName);
     const token = RtcTokenBuilder.buildTokenWithUid(
@@ -37,7 +40,8 @@ export async function GET(request: NextRequest) {
       channelName,
       uid,
       RtcRole.PUBLISHER,
-      Math.floor(Date.now() / 1000) + EXPIRATION_TIME_IN_SECONDS
+      expirationTime,
+      expirationTime
     );
 
     console.log('Token generated successfully');

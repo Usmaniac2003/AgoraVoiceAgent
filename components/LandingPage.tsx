@@ -1,16 +1,38 @@
 'use client';
 
-import { useState, useMemo } from 'react';
-import AgoraRTC, { AgoraRTCProvider } from 'agora-rtc-react';
+import { useState, useMemo, Suspense } from 'react';
+import dynamic from 'next/dynamic';
 import ParticleBackground from './ParticleBackground';
-import ConversationComponent from './ConversationComponent';
+import type {
+  AgoraTokenData,
+  ClientStartRequest,
+  AgentResponse,
+} from '../types/conversation';
 
-interface AgoraTokenData {
-  token: string;
-  uid: string;
-  channel: string;
-  clientID?: string;
-}
+// Dynamically import the ConversationComponent with ssr disabled
+const ConversationComponent = dynamic(() => import('./ConversationComponent'), {
+  ssr: false,
+});
+
+// Dynamically import AgoraRTC and AgoraRTCProvider
+const AgoraProvider = dynamic(
+  async () => {
+    const { AgoraRTCProvider, default: AgoraRTC } = await import(
+      'agora-rtc-react'
+    );
+
+    return {
+      default: ({ children }: { children: React.ReactNode }) => {
+        const client = useMemo(
+          () => AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' }),
+          []
+        );
+        return <AgoraRTCProvider client={client}>{children}</AgoraRTCProvider>;
+      },
+    };
+  },
+  { ssr: false }
+);
 
 export default function LandingPage() {
   const [showConversation, setShowConversation] = useState(false);
@@ -18,12 +40,6 @@ export default function LandingPage() {
   const [error, setError] = useState<string | null>(null);
   const [agoraData, setAgoraData] = useState<AgoraTokenData | null>(null);
   const [agentJoinError, setAgentJoinError] = useState(false);
-
-  // Create client once
-  const agoraClient = useMemo(
-    () => AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' }),
-    []
-  );
 
   const handleStartConversation = async () => {
     setIsLoading(true);
@@ -43,25 +59,31 @@ export default function LandingPage() {
         );
       }
 
-      setAgoraData(responseData);
-
       // Send the channel name when starting the conversation
+      const startRequest: ClientStartRequest = {
+        requester_id: responseData.uid,
+        channel_name: responseData.channel,
+        input_modalities: ['text'],
+        output_modalities: ['text', 'audio'],
+      };
+
       try {
-        const response = await fetch('/api/start-conversation', {
+        const response = await fetch('/api/invite-agent', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({
-            channel_name: responseData.channel,
-          }),
+          body: JSON.stringify(startRequest),
         });
 
         if (!response.ok) {
           setAgentJoinError(true);
         } else {
-          const agentData = await response.json();
-          setAgoraData({ ...responseData, clientID: agentData.clientID });
+          const agentData: AgentResponse = await response.json();
+          setAgoraData({
+            ...responseData,
+            agentId: agentData.agent_id,
+          });
         }
       } catch (err) {
         console.error('Failed to start conversation with agent:', err);
@@ -101,7 +123,7 @@ export default function LandingPage() {
       <div className="z-10 text-center">
         <h1 className="text-4xl font-bold mb-6">Converse</h1>
         <p className="text-lg mb-6">
-          When was the last time you hand an intelligent conversation?
+          When was the last time you had an intelligent conversation?
         </p>
         {!showConversation ? (
           <>
@@ -124,13 +146,15 @@ export default function LandingPage() {
                 as expected.
               </div>
             )}
-            <AgoraRTCProvider client={agoraClient}>
-              <ConversationComponent
-                agoraData={agoraData}
-                onTokenWillExpire={handleTokenWillExpire}
-                onEndConversation={() => setShowConversation(false)}
-              />
-            </AgoraRTCProvider>
+            <Suspense fallback={<div>Loading conversation...</div>}>
+              <AgoraProvider>
+                <ConversationComponent
+                  agoraData={agoraData}
+                  onTokenWillExpire={handleTokenWillExpire}
+                  onEndConversation={() => setShowConversation(false)}
+                />
+              </AgoraProvider>
+            </Suspense>
           </>
         ) : (
           <p>Failed to load conversation data.</p>

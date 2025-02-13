@@ -36,6 +36,48 @@ pnpm install
 cp .env.local.example .env.local
 ```
 
+The following environment variables are required:
+
+### Agora Configuration
+
+- `NEXT_PUBLIC_AGORA_APP_ID` - Your Agora App ID
+- `NEXT_PUBLIC_AGORA_APP_CERTIFICATE` - Your Agora App Certificate
+- `NEXT_PUBLIC_AGORA_CONVO_AI_BASE_URL` - Agora Conversation AI Base URL
+- `NEXT_PUBLIC_AGORA_CUSTOMER_ID` - Your Agora Customer ID
+- `NEXT_PUBLIC_AGORA_CUSTOMER_SECRET` - Your Agora Customer Secret
+- `NEXT_PUBLIC_AGENT_UID` - Agent UID (defaults to "Agent")
+
+### LLM Configuration
+
+- `NEXT_PUBLIC_LLM_URL` - LLM API endpoint URL
+- `NEXT_PUBLIC_LLM_TOKEN` - LLM API authentication token
+- `NEXT_PUBLIC_LLM_MODEL` - LLM model to use (optional)
+
+### TTS Configuration
+
+Choose one of the following TTS providers:
+
+#### Microsoft TTS
+
+- `NEXT_PUBLIC_TTS_VENDOR=microsoft`
+- `NEXT_PUBLIC_MICROSOFT_TTS_KEY` - Microsoft TTS API key
+- `NEXT_PUBLIC_MICROSOFT_TTS_REGION` - Microsoft TTS region
+- `NEXT_PUBLIC_MICROSOFT_TTS_VOICE_NAME` - Voice name (optional, defaults to 'en-US-AndrewMultilingualNeural')
+- `NEXT_PUBLIC_MICROSOFT_TTS_RATE` - Speech rate (optional, defaults to 1.0)
+- `NEXT_PUBLIC_MICROSOFT_TTS_VOLUME` - Volume (optional, defaults to 100.0)
+
+#### ElevenLabs
+
+- `NEXT_PUBLIC_TTS_VENDOR=elevenlabs`
+- `NEXT_PUBLIC_ELEVENLABS_API_KEY` - ElevenLabs API key
+- `NEXT_PUBLIC_ELEVENLABS_VOICE_ID` - ElevenLabs voice ID
+- `NEXT_PUBLIC_ELEVENLABS_MODEL_ID` - Model ID (optional, defaults to 'eleven_flash_v2_5')
+
+### Modalities Configuration
+
+- `NEXT_PUBLIC_INPUT_MODALITIES` - Comma-separated list of input modalities (defaults to 'text')
+- `NEXT_PUBLIC_OUTPUT_MODALITIES` - Comma-separated list of output modalities (defaults to 'text,audio')
+
 4. Run the development server:
 
 ```bash
@@ -76,3 +118,43 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
+
+## API Endpoints
+
+The application provides the following API endpoints:
+
+### Generate Agora Token
+
+- **Endpoint**: `/api/generate-agora-token`
+- **Method**: GET
+- **Query Parameters**:
+  - `uid` (optional) - User ID (defaults to 0)
+  - `channel` (optional) - Channel name (auto-generated if not provided)
+- **Response**: Returns token, uid, and channel information
+
+### Invite Agent
+
+- **Endpoint**: `/api/invite-agent`
+- **Method**: POST
+- **Body**:
+
+```typescript
+{
+  requester_id: string;
+  channel_name: string;
+  input_modalities?: string[];
+  output_modalities?: string[];
+}
+```
+
+### Stop Conversation
+
+- **Endpoint**: `/api/stop-conversation`
+- **Method**: POST
+- **Body**:
+
+```typescript
+{
+  agent_id: string;
+}
+```

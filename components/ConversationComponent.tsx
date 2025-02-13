@@ -14,17 +14,11 @@ import {
 } from 'agora-rtc-react';
 import { MicrophoneButton } from './MicrophoneButton';
 import { AudioVisualizer } from './AudioVisualizer';
-
-interface ConversationComponentProps {
-  agoraData: {
-    token: string;
-    channel: string;
-    uid: string;
-    clientID?: string;
-  };
-  onTokenWillExpire: (uid: string) => Promise<string>;
-  onEndConversation: () => void;
-}
+import type {
+  ConversationComponentProps,
+  StopConversationRequest,
+  ClientStartRequest,
+} from '../types/conversation';
 
 export default function ConversationComponent({
   agoraData,
@@ -99,25 +93,28 @@ export default function ConversationComponent({
   }, [client]);
 
   const handleStopConversation = async () => {
-    if (!isAgentConnected || !agoraData.clientID) return;
+    if (!isAgentConnected || !agoraData.agentId) return;
     setIsConnecting(true);
 
     try {
+      const stopRequest: StopConversationRequest = {
+        agent_id: agoraData.agentId,
+      };
+
       const response = await fetch('/api/stop-conversation', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Client-ID': agoraData.clientID,
         },
-        body: JSON.stringify({
-          channel_name: agoraData.channel,
-          uid: agentUID,
-        }),
+        body: JSON.stringify(stopRequest),
       });
 
       if (!response.ok) {
         throw new Error(`Failed to stop conversation: ${response.statusText}`);
       }
+
+      // Wait for the agent to actually leave before resetting state
+      // The user-left event handler will handle setting isAgentConnected to false
     } catch (error) {
       if (error instanceof Error) {
         console.warn('Error stopping conversation:', error.message);
@@ -127,19 +124,23 @@ export default function ConversationComponent({
   };
 
   const handleStartConversation = async () => {
-    if (!agoraData.clientID) return;
+    if (!agoraData.agentId) return;
     setIsConnecting(true);
 
     try {
-      const response = await fetch('/api/start-conversation', {
+      const startRequest: ClientStartRequest = {
+        requester_id: agoraData.uid,
+        channel_name: agoraData.channel,
+        input_modalities: ['text'],
+        output_modalities: ['text', 'audio'],
+      };
+
+      const response = await fetch('/api/invite-agent', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Client-ID': agoraData.clientID,
         },
-        body: JSON.stringify({
-          channel_name: agoraData.channel,
-        }),
+        body: JSON.stringify(startRequest),
       });
 
       if (!response.ok) {
@@ -173,7 +174,7 @@ export default function ConversationComponent({
 
   return (
     <div className="flex flex-col gap-6 p-4 h-full">
-      {/* Connection Status - Updated to include stop/connect buttons */}
+      {/* Connection Status - Updated to show connecting state */}
       <div className="absolute top-4 right-4 flex items-center gap-2">
         {isAgentConnected ? (
           <button

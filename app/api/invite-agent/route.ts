@@ -13,7 +13,10 @@ function getTTSConfig(vendor: TTSVendor): TTSConfig {
   if (vendor === TTSVendor.Microsoft) {
     if (
       !process.env.NEXT_PUBLIC_MICROSOFT_TTS_KEY ||
-      !process.env.NEXT_PUBLIC_MICROSOFT_TTS_REGION
+      !process.env.NEXT_PUBLIC_MICROSOFT_TTS_REGION ||
+      !process.env.NEXT_PUBLIC_MICROSOFT_TTS_VOICE_NAME ||
+      !process.env.NEXT_PUBLIC_MICROSOFT_TTS_RATE ||
+      !process.env.NEXT_PUBLIC_MICROSOFT_TTS_VOLUME
     ) {
       throw new Error('Missing Microsoft TTS environment variables');
     }
@@ -22,13 +25,9 @@ function getTTSConfig(vendor: TTSVendor): TTSConfig {
       params: {
         key: process.env.NEXT_PUBLIC_MICROSOFT_TTS_KEY,
         region: process.env.NEXT_PUBLIC_MICROSOFT_TTS_REGION,
-        voice_name:
-          process.env.NEXT_PUBLIC_MICROSOFT_TTS_VOICE_NAME ||
-          'en-US-AndrewMultilingualNeural',
-        rate: parseFloat(process.env.NEXT_PUBLIC_MICROSOFT_TTS_RATE || '1.0'),
-        volume: parseFloat(
-          process.env.NEXT_PUBLIC_MICROSOFT_TTS_VOLUME || '100.0'
-        ),
+        voice_name: process.env.NEXT_PUBLIC_MICROSOFT_TTS_VOICE_NAME,
+        rate: parseFloat(process.env.NEXT_PUBLIC_MICROSOFT_TTS_RATE),
+        volume: parseFloat(process.env.NEXT_PUBLIC_MICROSOFT_TTS_VOLUME),
       },
     };
   }
@@ -36,17 +35,17 @@ function getTTSConfig(vendor: TTSVendor): TTSConfig {
   if (vendor === TTSVendor.ElevenLabs) {
     if (
       !process.env.NEXT_PUBLIC_ELEVENLABS_API_KEY ||
-      !process.env.NEXT_PUBLIC_ELEVENLABS_VOICE_ID
+      !process.env.NEXT_PUBLIC_ELEVENLABS_VOICE_ID ||
+      !process.env.NEXT_PUBLIC_ELEVENLABS_MODEL_ID
     ) {
       throw new Error('Missing ElevenLabs environment variables');
     }
     return {
       vendor: TTSVendor.ElevenLabs,
       params: {
-        key: process.env.NEXT_PUBLIC_ELEVENLABS_API_KEY,
+        api_key: process.env.NEXT_PUBLIC_ELEVENLABS_API_KEY,
+        model_id: process.env.NEXT_PUBLIC_ELEVENLABS_MODEL_ID,
         voice_id: process.env.NEXT_PUBLIC_ELEVENLABS_VOICE_ID,
-        model_id:
-          process.env.NEXT_PUBLIC_ELEVENLABS_MODEL_ID || 'eleven_flash_v2_5',
       },
     };
   }
@@ -58,7 +57,7 @@ function getTTSConfig(vendor: TTSVendor): TTSConfig {
 function getValidatedConfig() {
   // Validate Agora Configuration
   const agoraConfig = {
-    baseUrl: process.env.NEXT_PUBLIC_AGORA_CONVO_AI_BASE_URL,
+    baseUrl: process.env.NEXT_PUBLIC_AGORA_CONVO_AI_BASE_URL || '',
     appId: process.env.NEXT_PUBLIC_AGORA_APP_ID || '',
     appCertificate: process.env.NEXT_PUBLIC_AGORA_APP_CERTIFICATE || '',
     customerId: process.env.NEXT_PUBLIC_AGORA_CUSTOMER_ID || '',
@@ -66,7 +65,7 @@ function getValidatedConfig() {
     agentUid: process.env.NEXT_PUBLIC_AGENT_UID || 'Agent',
   };
 
-  if (Object.values(agoraConfig).some((v) => !v || v.trim() === '')) {
+  if (Object.values(agoraConfig).some((v) => v === '')) {
     throw new Error('Missing Agora configuration. Check your .env.local file');
   }
 

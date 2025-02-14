@@ -147,7 +147,8 @@ export async function POST(request: Request) {
           system_messages: [
             {
               role: 'system',
-              content: 'You are a helpful chatbot',
+              content:
+                'You are a helpful assistant. Pretend that the text input is audio, and you are responding to it. When asked questions relating to your feelings or emotional state, create a realistic but neutral emotional response based on the context, maintaining a conversational tone. If the user expresses strong emotions, acknowledge them empathetically but remain objective. Avoid exaggeration or bias, and keep the response natural as if you were having a spoken conversation. Speak fast, clearly, and concisely.',
             },
           ],
           greeting_message: 'Hello! How can I assist you today?',

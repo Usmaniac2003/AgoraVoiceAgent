@@ -82,7 +82,7 @@ export default function ConversationComponent({
     }
   });
 
-  // Add this effect to sync isAgentConnected with remoteUsers
+  // Sync isAgentConnected with remoteUsers
   useEffect(() => {
     const isAgentInRemoteUsers = remoteUsers.some(
       (user) => user.uid.toString() === agentUID
@@ -155,6 +155,12 @@ export default function ConversationComponent({
 
       if (!response.ok) {
         throw new Error(`Failed to start conversation: ${response.statusText}`);
+      }
+
+      // Update agent ID when new agent is connected
+      const data = await response.json();
+      if (data.agent_id) {
+        agoraData.agentId = data.agent_id;
       }
     } catch (error) {
       if (error instanceof Error) {

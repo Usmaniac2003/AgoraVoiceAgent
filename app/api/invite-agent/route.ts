@@ -43,7 +43,7 @@ function getTTSConfig(vendor: TTSVendor): TTSConfig {
     return {
       vendor: TTSVendor.ElevenLabs,
       params: {
-        api_key: process.env.NEXT_PUBLIC_ELEVENLABS_API_KEY,
+        key: process.env.NEXT_PUBLIC_ELEVENLABS_API_KEY,
         model_id: process.env.NEXT_PUBLIC_ELEVENLABS_MODEL_ID,
         voice_id: process.env.NEXT_PUBLIC_ELEVENLABS_VOICE_ID,
       },
@@ -119,7 +119,7 @@ export async function POST(request: Request) {
       config.agora.appId,
       config.agora.appCertificate,
       channel_name,
-      requester_id,
+      config.agora.agentUid,
       RtcRole.PUBLISHER,
       expirationTime,
       expirationTime
@@ -171,6 +171,8 @@ export async function POST(request: Request) {
           prefix_padding_ms: 300,
         },
         tts: config.tts,
+        // These features must be enabled at account level
+        // contact support to enable these features.
         advanced_features: {
           enable_aivad: false,
           enable_bhvs: false,
@@ -178,7 +180,7 @@ export async function POST(request: Request) {
       },
     };
 
-    console.log('Sending request to start agent:', requestBody);
+    // console.log('Sending request to start agent:', requestBody);
 
     const response = await fetch(
       `${config.agora.baseUrl}/${config.agora.appId}/join`,

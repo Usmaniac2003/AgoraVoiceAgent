@@ -10,7 +10,7 @@ import {
   useJoin,
   usePublish,
   RemoteUser,
-  useCurrentUID,
+  UID,
 } from 'agora-rtc-react';
 import { MicrophoneButton } from './MicrophoneButton';
 import { AudioVisualizer } from './AudioVisualizer';
@@ -33,9 +33,10 @@ export default function ConversationComponent({
   const [isAgentConnected, setIsAgentConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const agentUID = process.env.NEXT_PUBLIC_AGENT_UID;
+  const [joinedUID, setJoinedUID] = useState<UID>(0);
 
   // Join the channel using the useJoin hook
-  useJoin(
+  const { isConnected: joinSuccess } = useJoin(
     {
       appid: process.env.NEXT_PUBLIC_AGORA_APP_ID!,
       channel: agoraData.channel,
@@ -44,6 +45,15 @@ export default function ConversationComponent({
     },
     true
   );
+
+  // Update actualUID when join is successful
+  useEffect(() => {
+    if (joinSuccess && client) {
+      const uid = client.uid;
+      setJoinedUID(uid as UID);
+      console.log('Join successful, using UID:', uid);
+    }
+  }, [joinSuccess, client]);
 
   // Publish local microphone track
   usePublish([localMicrophoneTrack]);
@@ -129,7 +139,7 @@ export default function ConversationComponent({
 
     try {
       const startRequest: ClientStartRequest = {
-        requester_id: agoraData.uid,
+        requester_id: joinedUID?.toString(),
         channel_name: agoraData.channel,
         input_modalities: ['text'],
         output_modalities: ['text', 'audio'],
@@ -157,17 +167,15 @@ export default function ConversationComponent({
 
   // Add token renewal handler
   const handleTokenWillExpire = useCallback(async () => {
-    if (!onTokenWillExpire) return;
-    const currentUID = useCurrentUID();
-    if (!currentUID) return;
+    if (!onTokenWillExpire || !joinedUID) return;
     try {
-      const newToken = await onTokenWillExpire(currentUID.toString());
+      const newToken = await onTokenWillExpire(joinedUID.toString());
       await client?.renewToken(newToken);
       console.log('Successfully renewed Agora token');
     } catch (error) {
       console.error('Failed to renew Agora token:', error);
     }
-  }, [client, onTokenWillExpire]);
+  }, [client, onTokenWillExpire, joinedUID]);
 
   // Add token observer
   useClientEvent(client, 'token-privilege-will-expire', handleTokenWillExpire);

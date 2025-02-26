@@ -72,11 +72,11 @@ function getValidatedConfig() {
   // Validate LLM Configuration
   const llmConfig = {
     url: process.env.NEXT_PUBLIC_LLM_URL,
-    token: process.env.NEXT_PUBLIC_LLM_TOKEN,
+    api_key: process.env.NEXT_PUBLIC_LLM_API_KEY,
     model: process.env.NEXT_PUBLIC_LLM_MODEL,
   };
 
-  if (!llmConfig.url || !llmConfig.token) {
+  if (!llmConfig.url || !llmConfig.api_key) {
     throw new Error('Missing LLM configuration. Check your .env.local file');
   }
 
@@ -143,7 +143,7 @@ export async function POST(request: Request) {
         },
         llm: {
           url: config.llm.url,
-          api_key: config.llm.token,
+          api_key: config.llm.api_key,
           system_messages: [
             {
               role: 'system',

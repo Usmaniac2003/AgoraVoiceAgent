@@ -1,12 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import {
-  useLocalMicrophoneTrack,
-  useRTCClient,
-  usePublish,
-  IMicrophoneAudioTrack,
-} from 'agora-rtc-react';
+import { useRTCClient, IMicrophoneAudioTrack } from 'agora-rtc-react';
 import { Mic, MicOff } from 'lucide-react';
 
 interface AudioBar {
@@ -105,7 +100,7 @@ export function MicrophoneButton({
     if (localMicrophoneTrack) {
       const newState = !isEnabled;
       try {
-        await localMicrophoneTrack.setEnabled(newState);
+        // await localMicrophoneTrack.setEnabled(newState);
         if (!newState) {
           await client.unpublish(localMicrophoneTrack);
         } else {
@@ -115,7 +110,7 @@ export function MicrophoneButton({
         console.log('Microphone state updated successfully');
       } catch (error) {
         console.error('Failed to toggle microphone:', error);
-        localMicrophoneTrack.setEnabled(isEnabled);
+        // localMicrophoneTrack.setEnabled(isEnabled);
       }
     }
   };

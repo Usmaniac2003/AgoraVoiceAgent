@@ -19,6 +19,15 @@ import type {
   StopConversationRequest,
   ClientStartRequest,
 } from '../types/conversation';
+import FloatingChat from './Floating-Chat';
+import protoRoot from '@/protobuf/SttMessage_es6.js';
+
+// Define the message type
+export type StreamMessage = {
+  uid: UID;
+  content: string;
+  timestamp: string;
+};
 
 export default function ConversationComponent({
   agoraData,
@@ -34,6 +43,7 @@ export default function ConversationComponent({
   const [isConnecting, setIsConnecting] = useState(false);
   const agentUID = process.env.NEXT_PUBLIC_AGENT_UID;
   const [joinedUID, setJoinedUID] = useState<UID>(0);
+  const [messages, setMessages] = useState<StreamMessage[]>([]);
 
   // Join the channel using the useJoin hook
   const { isConnected: joinSuccess } = useJoin(
@@ -93,6 +103,82 @@ export default function ConversationComponent({
   // Connection state changes
   useClientEvent(client, 'connection-state-change', (curState, prevState) => {
     console.log(`Connection state changed from ${prevState} to ${curState}`);
+
+    if (curState === 'DISCONNECTED') {
+      console.log('Attempting to reconnect...');
+    }
+  });
+
+  // Listen for the 'stream-message' event
+  useClientEvent(client, 'stream-message', (uid, data) => {
+    console.log('Received stream message from UID:', uid);
+
+    try {
+      let messageContent = ''; // Declare the variable here
+
+      // First try to decode with protobuf
+      try {
+        const textMessage =
+          protoRoot.Agora.SpeechToText.lookup('Text').decode(data);
+        console.log('Decoded protobuf message:', textMessage);
+
+        // Extract text from words array if available
+        if (textMessage.words && textMessage.words.length > 0) {
+          messageContent = textMessage.words
+            .map((word: { text: string }) => word.text)
+            .join(' ');
+        } else {
+          // Fallback to text decoder
+          throw new Error('No words in protobuf message');
+        }
+      } catch (protoError) {
+        console.warn('Failed to decode with protobuf:', protoError);
+
+        // Fallback to regular text decoding
+        const decodedText = new TextDecoder().decode(data);
+
+        // Parse the message format: ID|1|1|base64EncodedData
+        const messageParts = decodedText.split('|');
+        if (messageParts.length >= 4) {
+          const base64Data = messageParts[3];
+          try {
+            // Decode the base64 data
+            const jsonText = atob(base64Data);
+            const jsonData = JSON.parse(jsonText);
+            console.log('Parsed JSON data:', jsonData);
+
+            // Extract the text field
+            if (jsonData.text) {
+              messageContent = jsonData.text;
+            } else {
+              messageContent = 'No text content found';
+            }
+          } catch (jsonError) {
+            console.error('Failed to parse JSON:', jsonError);
+            messageContent = decodedText;
+          }
+        } else {
+          // If not in expected format, use raw text
+          console.log('Not valid message format, using raw decoded text');
+          messageContent = decodedText;
+        }
+      }
+
+      // Add the processed message to the messages state
+      const timestamp = new Date().toLocaleTimeString();
+      setMessages((prevMessages) => [
+        ...prevMessages,
+        { uid, content: messageContent, timestamp },
+      ]);
+
+      console.log('Processed stream message:', {
+        uid,
+        content: messageContent,
+        timestamp,
+      });
+    } catch (error) {
+      console.error('Error processing stream message:', error);
+    }
   });
 
   // Cleanup on unmount
@@ -248,6 +334,9 @@ export default function ConversationComponent({
           localMicrophoneTrack={localMicrophoneTrack}
         />
       </div>
+
+      {/* Add the FloatingChat component */}
+      <FloatingChat streamMessages={messages} agentUID={agentUID} />
     </div>
   );
 }

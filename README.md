@@ -4,6 +4,11 @@ A Next.js-based web-app for conversational AI agents, built with Agora's Real-Ti
 
 <img src="./.github/assets/Conversation-Ai-Client.gif" alt="Conversational AI Client" />
 
+## Guides and Documentation
+
+- [Guide.md](./DOCS/Guide.md) on how to build this application from scratch.
+- [User Interaction Diagram](./DOCS/User-Interaction-Diagram.md) for how the application interacts with the different services.
+
 ## Prerequisites
 
 Before you begin, ensure you have the following installed:

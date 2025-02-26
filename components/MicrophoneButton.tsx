@@ -100,7 +100,7 @@ export function MicrophoneButton({
     if (localMicrophoneTrack) {
       const newState = !isEnabled;
       try {
-        // await localMicrophoneTrack.setEnabled(newState);
+        await localMicrophoneTrack.setEnabled(newState);
         if (!newState) {
           await client.unpublish(localMicrophoneTrack);
         } else {
@@ -110,7 +110,7 @@ export function MicrophoneButton({
         console.log('Microphone state updated successfully');
       } catch (error) {
         console.error('Failed to toggle microphone:', error);
-        // localMicrophoneTrack.setEnabled(isEnabled);
+        localMicrophoneTrack.setEnabled(isEnabled);
       }
     }
   };

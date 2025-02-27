@@ -22,19 +22,22 @@ export default function FloatingChat({
   interimMessage = null,
   agentUID,
 }: FloatingChatProps) {
-  const [isOpen, setIsOpen] = useState(true); // Start with chat open
+  // State for managing chat window visibility and message history
+  const [isOpen, setIsOpen] = useState(true);
   const [chatHistory, setChatHistory] = useState<Message[]>([]);
+
+  // Ref for handling scroll behavior
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const processedMessagesRef = useRef(new Set<string>());
 
-  // Memoize the callback to prevent it from changing on every render
+  // Callback to open chat window when new messages arrive
   const handleNewMessage = useCallback(() => {
     if (!isOpen) {
       setIsOpen(true);
     }
   }, [isOpen]);
 
-  // Use the streaming message processor hook
+  // Process incoming messages using the streaming processor hook
   const { messages, currentStreamingMessage } = useStreamingMessageProcessor({
     streamMessages,
     interimMessage,
@@ -42,23 +45,23 @@ export default function FloatingChat({
     agentUID,
   });
 
-  // Process messages and update chat history
+  // Update chat history when new messages are finalized
   useEffect(() => {
     if (messages.length === 0) return;
 
     // For debugging
-    console.log('Processing messages:', messages);
+    // console.log('Processing messages:', messages);
 
-    // Update chat history with completed messages
+    // Update chat history with only finalized messages
     setChatHistory(messages.filter((msg) => msg.isFinal));
   }, [messages]);
 
-  // Check if the current streaming message content is already in a final message
-  // or if it's a duplicate of a message we're already showing
+  // Determine whether to show the streaming message
   const shouldShowStreamingMessage = useCallback(() => {
     if (!currentStreamingMessage) return false;
 
-    // Don't show streaming message if there's a final message with the same content
+    // Check for duplicate content to prevent showing the same message twice
+    // This handles various cases where messages might overlap or be contained within each other
     const isDuplicate = chatHistory.some(
       (msg) =>
         // Check if content is the same (exact match)
@@ -74,7 +77,7 @@ export default function FloatingChat({
     return !isDuplicate;
   }, [chatHistory, currentStreamingMessage]);
 
-  // Scroll to bottom when messages change
+  // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     if (scrollAreaRef.current) {
       const scrollElement = scrollAreaRef.current.querySelector(
@@ -98,7 +101,7 @@ export default function FloatingChat({
 
   return (
     <div className="fixed bottom-6 right-6 z-50">
-      {/* Chat Button */}
+      {/* Chat Button - Toggle button for chat window visibility */}
       <Button
         onClick={toggleChat}
         className={cn(
@@ -110,7 +113,7 @@ export default function FloatingChat({
         <MessageCircle className="h-6 w-6 text-black" />
       </Button>
 
-      {/* Chat Window */}
+      {/* Main chat window container with animation states */}
       <div
         className={cn(
           'bg-white rounded-lg border shadow-lg transition-all duration-300 overflow-hidden',
@@ -137,13 +140,14 @@ export default function FloatingChat({
           ref={scrollAreaRef}
         >
           <div className="space-y-4">
+            {/* Show empty state when no messages exist */}
             {chatHistory.length === 0 && !currentStreamingMessage ? (
               <div className="text-center text-gray-500 py-8">
                 No messages yet. Start speaking to see the transcript.
               </div>
             ) : (
               <>
-                {/* Display all completed messages in the history */}
+                {/* Render finalized messages */}
                 {chatHistory.map((message) => (
                   <div
                     key={message.id}
@@ -182,7 +186,7 @@ export default function FloatingChat({
                   </div>
                 ))}
 
-                {/* Display the currently streaming message if it's not a duplicate */}
+                {/* Render currently streaming message with typing indicator */}
                 {currentStreamingMessage && shouldShowStreamingMessage() && (
                   <div
                     key={`streaming-${currentStreamingMessage.id}`}

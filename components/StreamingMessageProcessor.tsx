@@ -20,21 +20,25 @@ interface StreamingMessageProcessorProps {
   agentUID: string | undefined;
 }
 
+// Custom hook for processing streaming messages and managing message state
 export default function useStreamingMessageProcessor({
   streamMessages,
   interimMessage = null,
   onNewMessage,
   agentUID,
 }: StreamingMessageProcessorProps) {
+  // State to store finalized messages and currently streaming message
   const [messages, setMessages] = useState<Message[]>([]);
   const [currentStreamingMessage, setCurrentStreamingMessage] =
     useState<Message | null>(null);
-  const processedMessagesRef = useRef(new Set<string>());
-  const finalizedContentRef = useRef(new Set<string>());
 
-  // Process incoming stream messages
+  // Refs to track processed messages and finalized content across renders
+  const processedMessagesRef = useRef(new Set<string>()); // Tracks message IDs that have been processed
+  const finalizedContentRef = useRef(new Set<string>()); // Tracks message content that has been finalized
+
+  // Process incoming stream messages whenever they change
   useEffect(() => {
-    // Only process if there are messages or if the length has changed
+    // Skip processing if no new messages to handle
     if (
       streamMessages.length === 0 ||
       (streamMessages.length === processedMessagesRef.current.size &&
@@ -64,29 +68,29 @@ export default function useStreamingMessageProcessor({
         avatar: msg.avatar || '',
       };
 
-      // If it's a final message, add to history and track its content
+      // If message is marked as final, add to history and mark content as finalized
       if (message.isFinal) {
         newMessages.push(message);
         hasNewMessage = true;
         finalizedContentRef.current.add(message.content);
       } else {
-        // If it's not final, check if its content matches any finalized content
+        // For non-final messages, check if we've already finalized this content
+        // This prevents showing duplicate content in different states
         const isContentAlreadyFinalized = finalizedContentRef.current.has(
           message.content
         );
 
-        // Only update the streaming message if it's not already finalized
         if (!isContentAlreadyFinalized) {
           setCurrentStreamingMessage(message);
         }
       }
     });
 
-    // Update messages state if we have new ones
+    // Update the message history with new finalized messages
     if (newMessages.length > 0) {
       setMessages((prev) => [...prev, ...newMessages]);
 
-      // Clear the current streaming message if it became final
+      // Clear streaming message if it became final or its content was finalized
       if (
         currentStreamingMessage &&
         (newMessages.some((msg) => msg.id === currentStreamingMessage.id) ||
@@ -102,7 +106,7 @@ export default function useStreamingMessageProcessor({
     }
   }, [streamMessages, onNewMessage, agentUID, currentStreamingMessage]);
 
-  // Handle interim message (if provided)
+  // Handle interim message updates (typically used for real-time typing indicators)
   useEffect(() => {
     if (!interimMessage) {
       return;

@@ -124,7 +124,13 @@ export default function ConversationComponent({
       try {
         const textMessage =
           protoRoot.Agora.SpeechToText.lookup('Text').decode(data);
-        console.log('Decoded protobuf message:', textMessage);
+        console.log('Decoded protobuf message:', {
+          text: textMessage.words
+            ?.map((w: { text: string }) => w.text)
+            .join(' '),
+          isFinal: textMessage.words?.[0]?.is_final,
+          raw: textMessage,
+        });
 
         // Check if this is a final message
         const isFinal =
@@ -178,23 +184,38 @@ export default function ConversationComponent({
 
         // Fallback to regular text decoding
         const decodedText = new TextDecoder().decode(data);
+        console.log('Fallback decoded text:', decodedText);
 
         try {
           // Try to parse the base64 message format
           const messageParts = decodedText.split('|');
           if (messageParts.length >= 4) {
+            console.log('Message parts:', {
+              messageId: messageParts[0],
+              // Log other parts if needed
+              base64Data: messageParts[3].substring(0, 100) + '...', // Log first 100 chars
+            });
+
             const messageId = messageParts[0];
             const base64Data = messageParts[3];
 
             try {
               // Decode the base64 data
               const jsonText = atob(base64Data);
+              console.log('Decoded base64 to JSON text:', jsonText);
 
               // Try to parse as complete JSON first
               try {
                 const jsonData = JSON.parse(jsonText);
+                console.log('Successfully parsed complete JSON:', jsonData);
                 processJsonMessage(jsonData, messageId, remoteUser);
               } catch (jsonError) {
+                console.log('Partial JSON received, buffering:', {
+                  messageId,
+                  currentBuffer: MESSAGE_BUFFER[messageId],
+                  newData: jsonText,
+                });
+
                 // If JSON parsing fails, it might be a partial message
                 if (!MESSAGE_BUFFER[messageId]) {
                   MESSAGE_BUFFER[messageId] = '';
@@ -236,7 +257,17 @@ export default function ConversationComponent({
     messageId: string,
     remoteUser: UID
   ) => {
-    if (!jsonData.text) return;
+    console.log('Processing JSON message:', {
+      messageId,
+      jsonData,
+      remoteUser,
+      currentUID: joinedUID,
+    });
+
+    if (!jsonData.text) {
+      console.log('Skipping message - no text content');
+      return;
+    }
 
     // Determine sender based on user_id field
     let sender: 'user' | 'ai' = 'ai';

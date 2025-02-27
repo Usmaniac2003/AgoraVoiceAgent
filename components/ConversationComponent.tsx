@@ -33,6 +33,8 @@ export type StreamMessage = {
   isFinal?: boolean;
 };
 
+const MESSAGE_BUFFER: { [key: string]: string } = {};
+
 export default function ConversationComponent({
   agoraData,
   onTokenWillExpire,
@@ -141,169 +143,137 @@ export default function ConversationComponent({
           throw new Error('No words in protobuf message');
         }
 
-        // Only add the message to the state if it's a final message
-        if (isFinal) {
-          const timestamp = new Date().toLocaleTimeString();
-          const messageObj: StreamMessage = {
-            uid: remoteUser,
-            content: messageContent,
-            timestamp,
-            sender: remoteUser.toString() === agentUID ? 'ai' : 'user',
-            isFinal,
-            id: Date.now().toString(),
-          };
+        // Create message object
+        const messageObj: StreamMessage = {
+          uid: remoteUser,
+          content: messageContent,
+          timestamp: new Date().toLocaleTimeString(),
+          sender: remoteUser.toString() === agentUID ? 'ai' : 'user',
+          isFinal,
+          id: Date.now().toString(),
+        };
 
-          setMessages((prevMessages) => [...prevMessages, messageObj]);
+        // Update messages state
+        setMessages((prevMessages) => {
+          // If this is a final message or we don't have any messages yet
+          if (isFinal || prevMessages.length === 0) {
+            return [...prevMessages, messageObj];
+          }
 
-          console.log('Processed final stream message:', {
-            uid: remoteUser,
-            content: messageContent,
-            timestamp,
-          });
-        } else {
-          console.log('Skipping non-final message:', messageContent);
-        }
+          // For non-final messages, update the last message if it's from the same sender
+          const lastMessage = prevMessages[prevMessages.length - 1];
+          if (
+            !lastMessage.isFinal &&
+            lastMessage.sender === messageObj.sender
+          ) {
+            const updatedMessages = [...prevMessages];
+            updatedMessages[updatedMessages.length - 1] = messageObj;
+            return updatedMessages;
+          }
+
+          return [...prevMessages, messageObj];
+        });
       } catch (protoError) {
         console.warn('Failed to decode with protobuf:', protoError);
 
         // Fallback to regular text decoding
         const decodedText = new TextDecoder().decode(data);
 
-        // Parse the message format: ID|1|1|base64EncodedData
-        const messageParts = decodedText.split('|');
-
-        if (messageParts.length >= 4) {
-          const messageId = messageParts[0];
-          const base64Data = messageParts[3];
-
-          try {
-            // Decode the base64 data
-            const jsonText = atob(base64Data);
-            console.log(
-              'Base64 decoded text:',
-              jsonText.substring(0, 100) + '...'
-            );
+        try {
+          // Try to parse the base64 message format
+          const messageParts = decodedText.split('|');
+          if (messageParts.length >= 4) {
+            const messageId = messageParts[0];
+            const base64Data = messageParts[3];
 
             try {
-              const jsonData = JSON.parse(jsonText);
-              console.log('Parsed JSON data:', jsonData);
+              // Decode the base64 data
+              const jsonText = atob(base64Data);
 
-              // Extract the text field and is_final flag
-              if (jsonData.text) {
-                // Determine sender based on user_id field
-                let sender: 'user' | 'ai' = 'ai';
-
-                // If user_id matches the joined UID, it's from the user
-                if (
-                  jsonData.user_id &&
-                  jsonData.user_id === joinedUID.toString()
-                ) {
-                  sender = 'user';
-                } else if (jsonData.user_id === '') {
-                  // Empty user_id indicates AI message
-                  sender = 'ai';
+              // Try to parse as complete JSON first
+              try {
+                const jsonData = JSON.parse(jsonText);
+                processJsonMessage(jsonData, messageId, remoteUser);
+              } catch (jsonError) {
+                // If JSON parsing fails, it might be a partial message
+                if (!MESSAGE_BUFFER[messageId]) {
+                  MESSAGE_BUFFER[messageId] = '';
                 }
 
-                const messageObj: StreamMessage = {
-                  uid: remoteUser,
-                  content: jsonData.text,
-                  timestamp: new Date().toLocaleTimeString(),
-                  sender,
-                  isFinal: jsonData.is_final || false,
-                  id: messageId,
-                };
+                // Append new data to buffer
+                MESSAGE_BUFFER[messageId] += jsonText;
 
-                // Update messages state based on message ID
-                setMessages((prevMessages) => {
-                  // Check if we already have a message with this ID
-                  const existingIndex = prevMessages.findIndex(
-                    (msg) => msg.id === messageId
+                // Try to parse the accumulated buffer
+                try {
+                  const completeJson = JSON.parse(MESSAGE_BUFFER[messageId]);
+                  processJsonMessage(completeJson, messageId, remoteUser);
+                  // Clear buffer after successful parse
+                  delete MESSAGE_BUFFER[messageId];
+                } catch (bufferError) {
+                  // Still incomplete, wait for more data
+                  console.log(
+                    'Accumulated partial message:',
+                    MESSAGE_BUFFER[messageId].substring(0, 100) + '...'
                   );
-
-                  if (existingIndex >= 0) {
-                    // Update existing message
-                    const updatedMessages = [...prevMessages];
-                    updatedMessages[existingIndex] = {
-                      ...updatedMessages[existingIndex],
-                      content: messageObj.content,
-                      isFinal: messageObj.isFinal,
-                    };
-                    return updatedMessages;
-                  } else {
-                    // Add new message
-                    return [
-                      ...prevMessages,
-                      {
-                        ...messageObj,
-                        id: messageId,
-                      },
-                    ];
-                  }
-                });
+                }
               }
-            } catch (jsonError) {
-              console.error('JSON parse error:', jsonError);
-              console.log('Problematic JSON string:', jsonText);
-
-              // Handle split messages - this is likely part of a previous message
-              // Try to extract text content directly
-              const textMatch = jsonText.match(/text": "([^"]+)/);
-              if (textMatch && textMatch[1]) {
-                const partialText = textMatch[1];
-
-                // Add as a new message or append to the last message
-                setMessages((prevMessages) => {
-                  if (
-                    prevMessages.length > 0 &&
-                    !prevMessages[prevMessages.length - 1].isFinal
-                  ) {
-                    // Append to the last message
-                    const updatedMessages = [...prevMessages];
-                    const lastIndex = updatedMessages.length - 1;
-                    updatedMessages[lastIndex] = {
-                      ...updatedMessages[lastIndex],
-                      content: updatedMessages[lastIndex].content + partialText,
-                    };
-                    return updatedMessages;
-                  } else {
-                    // Create a new message
-                    return [
-                      ...prevMessages,
-                      {
-                        id: Date.now().toString(),
-                        uid: remoteUser,
-                        content: partialText,
-                        timestamp: new Date().toLocaleTimeString(),
-                        sender:
-                          remoteUser.toString() === agentUID ? 'ai' : 'user',
-                        isFinal: false,
-                      },
-                    ];
-                  }
-                });
-              }
+            } catch (base64Error) {
+              console.error('Base64 decode error:', base64Error);
             }
-          } catch (base64Error) {
-            console.error('Base64 decode error:', base64Error);
           }
-        } else {
-          // Not in the expected format, use as raw text
-          const messageObj: StreamMessage = {
-            uid: remoteUser,
-            content: decodedText,
-            timestamp: new Date().toLocaleTimeString(),
-            id: Date.now().toString(),
-            sender: remoteUser.toString() === agentUID ? 'ai' : 'user',
-            isFinal: true,
-          };
-
-          setMessages((prevMessages) => [...prevMessages, messageObj]);
+        } catch (error) {
+          console.error('Error processing message:', error);
         }
       }
     } catch (error) {
-      console.error('Error processing stream message:', error);
+      console.error('Error in stream message handler:', error);
     }
   });
+
+  // Add this helper function to process complete JSON messages
+  const processJsonMessage = (
+    jsonData: any,
+    messageId: string,
+    remoteUser: UID
+  ) => {
+    if (!jsonData.text) return;
+
+    // Determine sender based on user_id field
+    let sender: 'user' | 'ai' = 'ai';
+    if (jsonData.user_id && jsonData.user_id === joinedUID.toString()) {
+      sender = 'user';
+    }
+
+    const messageObj: StreamMessage = {
+      uid: remoteUser,
+      content: jsonData.text,
+      timestamp: new Date().toLocaleTimeString(),
+      sender,
+      isFinal: jsonData.is_final || false,
+      id: messageId,
+    };
+
+    // Update messages state with proper handling of streaming updates
+    setMessages((prevMessages) => {
+      const existingIndex = prevMessages.findIndex(
+        (msg) => msg.id === messageId
+      );
+
+      if (existingIndex >= 0) {
+        // Update existing message
+        const updatedMessages = [...prevMessages];
+        updatedMessages[existingIndex] = {
+          ...updatedMessages[existingIndex],
+          content: messageObj.content,
+          isFinal: messageObj.isFinal,
+        };
+        return updatedMessages;
+      }
+
+      // Add new message
+      return [...prevMessages, messageObj];
+    });
+  };
 
   // Cleanup on unmount
   useEffect(() => {

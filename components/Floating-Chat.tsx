@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { MessageCircle, X } from 'lucide-react';
@@ -155,15 +154,23 @@ export default function FloatingChat({
                       message.sender === 'user' ? 'flex-row-reverse' : ''
                     }`}
                   >
-                    <Avatar className="mt-0.5 flex-shrink-0">
-                      <AvatarImage
-                        src={message.avatar}
-                        alt={message.sender === 'user' ? 'User' : 'AI'}
-                      />
-                      <AvatarFallback>
+                    <div
+                      className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                        message.sender === 'user'
+                          ? 'bg-gray-200'
+                          : 'bg-blue-500'
+                      }`}
+                    >
+                      <span
+                        className={`text-sm ${
+                          message.sender === 'user'
+                            ? 'text-gray-600'
+                            : 'text-white'
+                        }`}
+                      >
                         {message.sender === 'user' ? 'U' : 'AI'}
-                      </AvatarFallback>
-                    </Avatar>
+                      </span>
+                    </div>
 
                     <div
                       className={`flex flex-col ${
@@ -196,19 +203,23 @@ export default function FloatingChat({
                         : ''
                     }`}
                   >
-                    <Avatar className="mt-0.5 flex-shrink-0">
-                      <AvatarImage
-                        src={currentStreamingMessage.avatar}
-                        alt={
+                    <div
+                      className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                        currentStreamingMessage.sender === 'user'
+                          ? 'bg-gray-200'
+                          : 'bg-blue-500'
+                      }`}
+                    >
+                      <span
+                        className={`text-sm ${
                           currentStreamingMessage.sender === 'user'
-                            ? 'User'
-                            : 'AI'
-                        }
-                      />
-                      <AvatarFallback>
+                            ? 'text-gray-600'
+                            : 'text-white'
+                        }`}
+                      >
                         {currentStreamingMessage.sender === 'user' ? 'U' : 'AI'}
-                      </AvatarFallback>
-                    </Avatar>
+                      </span>
+                    </div>
 
                     <div
                       className={`flex flex-col ${

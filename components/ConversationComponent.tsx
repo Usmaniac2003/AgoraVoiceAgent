@@ -27,6 +27,10 @@ export type StreamMessage = {
   uid: UID;
   content: string;
   timestamp: string;
+  id: string;
+  avatar?: string;
+  sender?: 'user' | 'ai';
+  isFinal?: boolean;
 };
 
 export default function ConversationComponent({
@@ -110,19 +114,24 @@ export default function ConversationComponent({
   });
 
   // Listen for the 'stream-message' event
-  useClientEvent(client, 'stream-message', (uid, data) => {
-    console.log('Received stream message from UID:', uid);
-
+  useClientEvent(client, 'stream-message', (remoteUser, data) => {
     try {
-      let messageContent = ''; // Declare the variable here
+      console.log('Received stream message from UID:', remoteUser);
 
-      // First try to decode with protobuf
+      // Try to decode with protobuf first
       try {
         const textMessage =
           protoRoot.Agora.SpeechToText.lookup('Text').decode(data);
         console.log('Decoded protobuf message:', textMessage);
 
+        // Check if this is a final message
+        const isFinal =
+          textMessage.words &&
+          textMessage.words.length > 0 &&
+          textMessage.words[0].is_final;
+
         // Extract text from words array if available
+        let messageContent = '';
         if (textMessage.words && textMessage.words.length > 0) {
           messageContent = textMessage.words
             .map((word: { text: string }) => word.text)
@@ -130,6 +139,29 @@ export default function ConversationComponent({
         } else {
           // Fallback to text decoder
           throw new Error('No words in protobuf message');
+        }
+
+        // Only add the message to the state if it's a final message
+        if (isFinal) {
+          const timestamp = new Date().toLocaleTimeString();
+          const messageObj: StreamMessage = {
+            uid: remoteUser,
+            content: messageContent,
+            timestamp,
+            sender: remoteUser.toString() === agentUID ? 'ai' : 'user',
+            isFinal,
+            id: Date.now().toString(),
+          };
+
+          setMessages((prevMessages) => [...prevMessages, messageObj]);
+
+          console.log('Processed final stream message:', {
+            uid: remoteUser,
+            content: messageContent,
+            timestamp,
+          });
+        } else {
+          console.log('Skipping non-final message:', messageContent);
         }
       } catch (protoError) {
         console.warn('Failed to decode with protobuf:', protoError);
@@ -139,43 +171,135 @@ export default function ConversationComponent({
 
         // Parse the message format: ID|1|1|base64EncodedData
         const messageParts = decodedText.split('|');
+
         if (messageParts.length >= 4) {
+          const messageId = messageParts[0];
           const base64Data = messageParts[3];
+
           try {
             // Decode the base64 data
             const jsonText = atob(base64Data);
-            const jsonData = JSON.parse(jsonText);
-            console.log('Parsed JSON data:', jsonData);
+            console.log(
+              'Base64 decoded text:',
+              jsonText.substring(0, 100) + '...'
+            );
 
-            // Extract the text field
-            if (jsonData.text) {
-              messageContent = jsonData.text;
-            } else {
-              messageContent = 'No text content found';
+            try {
+              const jsonData = JSON.parse(jsonText);
+              console.log('Parsed JSON data:', jsonData);
+
+              // Extract the text field and is_final flag
+              if (jsonData.text) {
+                // Determine sender based on user_id field
+                let sender: 'user' | 'ai' = 'ai';
+
+                // If user_id matches the joined UID, it's from the user
+                if (
+                  jsonData.user_id &&
+                  jsonData.user_id === joinedUID.toString()
+                ) {
+                  sender = 'user';
+                } else if (jsonData.user_id === '') {
+                  // Empty user_id indicates AI message
+                  sender = 'ai';
+                }
+
+                const messageObj: StreamMessage = {
+                  uid: remoteUser,
+                  content: jsonData.text,
+                  timestamp: new Date().toLocaleTimeString(),
+                  sender,
+                  isFinal: jsonData.is_final || false,
+                  id: messageId,
+                };
+
+                // Update messages state based on message ID
+                setMessages((prevMessages) => {
+                  // Check if we already have a message with this ID
+                  const existingIndex = prevMessages.findIndex(
+                    (msg) => msg.id === messageId
+                  );
+
+                  if (existingIndex >= 0) {
+                    // Update existing message
+                    const updatedMessages = [...prevMessages];
+                    updatedMessages[existingIndex] = {
+                      ...updatedMessages[existingIndex],
+                      content: messageObj.content,
+                      isFinal: messageObj.isFinal,
+                    };
+                    return updatedMessages;
+                  } else {
+                    // Add new message
+                    return [
+                      ...prevMessages,
+                      {
+                        ...messageObj,
+                        id: messageId,
+                      },
+                    ];
+                  }
+                });
+              }
+            } catch (jsonError) {
+              console.error('JSON parse error:', jsonError);
+              console.log('Problematic JSON string:', jsonText);
+
+              // Handle split messages - this is likely part of a previous message
+              // Try to extract text content directly
+              const textMatch = jsonText.match(/text": "([^"]+)/);
+              if (textMatch && textMatch[1]) {
+                const partialText = textMatch[1];
+
+                // Add as a new message or append to the last message
+                setMessages((prevMessages) => {
+                  if (
+                    prevMessages.length > 0 &&
+                    !prevMessages[prevMessages.length - 1].isFinal
+                  ) {
+                    // Append to the last message
+                    const updatedMessages = [...prevMessages];
+                    const lastIndex = updatedMessages.length - 1;
+                    updatedMessages[lastIndex] = {
+                      ...updatedMessages[lastIndex],
+                      content: updatedMessages[lastIndex].content + partialText,
+                    };
+                    return updatedMessages;
+                  } else {
+                    // Create a new message
+                    return [
+                      ...prevMessages,
+                      {
+                        id: Date.now().toString(),
+                        uid: remoteUser,
+                        content: partialText,
+                        timestamp: new Date().toLocaleTimeString(),
+                        sender:
+                          remoteUser.toString() === agentUID ? 'ai' : 'user',
+                        isFinal: false,
+                      },
+                    ];
+                  }
+                });
+              }
             }
-          } catch (jsonError) {
-            console.error('Failed to parse JSON:', jsonError);
-            messageContent = decodedText;
+          } catch (base64Error) {
+            console.error('Base64 decode error:', base64Error);
           }
         } else {
-          // If not in expected format, use raw text
-          console.log('Not valid message format, using raw decoded text');
-          messageContent = decodedText;
+          // Not in the expected format, use as raw text
+          const messageObj: StreamMessage = {
+            uid: remoteUser,
+            content: decodedText,
+            timestamp: new Date().toLocaleTimeString(),
+            id: Date.now().toString(),
+            sender: remoteUser.toString() === agentUID ? 'ai' : 'user',
+            isFinal: true,
+          };
+
+          setMessages((prevMessages) => [...prevMessages, messageObj]);
         }
       }
-
-      // Add the processed message to the messages state
-      const timestamp = new Date().toLocaleTimeString();
-      setMessages((prevMessages) => [
-        ...prevMessages,
-        { uid, content: messageContent, timestamp },
-      ]);
-
-      console.log('Processed stream message:', {
-        uid,
-        content: messageContent,
-        timestamp,
-      });
     } catch (error) {
       console.error('Error processing stream message:', error);
     }

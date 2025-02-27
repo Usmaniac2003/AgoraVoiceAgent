@@ -1,89 +1,78 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { MessageCircle, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { StreamMessage } from './ConversationComponent';
+import useStreamingMessageProcessor, {
+  Message,
+} from './StreamingMessageProcessor';
 
-// Define the message type
-type Message = {
-  id: string;
-  content: string;
-  sender: 'user' | 'ai';
-  timestamp: Date;
-  avatar?: string;
-};
-
-type FloatingChatProps = {
-  streamMessages?: StreamMessage[];
-  agentUID?: string;
-};
+interface FloatingChatProps {
+  streamMessages: StreamMessage[];
+  interimMessage?: StreamMessage | null;
+  agentUID: string | undefined;
+}
 
 export default function FloatingChat({
-  streamMessages = [],
+  streamMessages,
+  interimMessage = null,
   agentUID,
 }: FloatingChatProps) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [isOpen, setIsOpen] = useState(true); // Start with chat open
+  const [chatHistory, setChatHistory] = useState<Message[]>([]);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const processedMessagesRef = useRef(new Set<string>());
 
-  // Update messages when streamMessages changes
-  useEffect(() => {
-    if (streamMessages.length > 0) {
-      try {
-        // Get the latest stream message
-        const latestStreamMessage = streamMessages[streamMessages.length - 1];
-
-        // Try to parse the content as JSON in case it's a protobuf-decoded message
-        let messageContent = latestStreamMessage.content;
-        try {
-          const parsedContent = JSON.parse(latestStreamMessage.content);
-          // If it's a protobuf message with a text field, use that
-          if (parsedContent.words && Array.isArray(parsedContent.words)) {
-            messageContent = parsedContent.words
-              .map((word: { text: string }) => word.text)
-              .join(' ');
-          } else if (parsedContent.text) {
-            messageContent = parsedContent.text;
-          }
-        } catch (e) {
-          // Not JSON, use the raw content
-          console.log('Using raw message content');
-        }
-
-        // Only add if it's not empty and not a duplicate
-        if (messageContent && messageContent.trim() !== '') {
-          const isDuplicate = messages.some(
-            (msg) => msg.content === messageContent
-          );
-
-          if (!isDuplicate) {
-            const newMessage: Message = {
-              id: Date.now().toString(),
-              content: messageContent,
-              // Determine if the message is from the AI agent or the user
-              sender:
-                latestStreamMessage.uid.toString() === agentUID ? 'ai' : 'user',
-              timestamp: new Date(),
-              avatar: '/placeholder.svg?height=40&width=40',
-            };
-
-            setMessages((prevMessages) => [...prevMessages, newMessage]);
-
-            // Auto-open the chat when a new message arrives
-            if (!isOpen) {
-              setIsOpen(true);
-            }
-          }
-        }
-      } catch (error) {
-        console.error('Error processing stream message:', error);
-      }
+  // Memoize the callback to prevent it from changing on every render
+  const handleNewMessage = useCallback(() => {
+    if (!isOpen) {
+      setIsOpen(true);
     }
-  }, [streamMessages, agentUID, isOpen, messages]);
+  }, [isOpen]);
+
+  // Use the streaming message processor hook
+  const { messages, currentStreamingMessage } = useStreamingMessageProcessor({
+    streamMessages,
+    interimMessage,
+    onNewMessage: handleNewMessage,
+    agentUID,
+  });
+
+  // Process messages and update chat history
+  useEffect(() => {
+    if (messages.length === 0) return;
+
+    // For debugging
+    console.log('Processing messages:', messages);
+
+    // Update chat history with completed messages
+    setChatHistory(messages.filter((msg) => msg.isFinal));
+  }, [messages]);
+
+  // Check if the current streaming message content is already in a final message
+  // or if it's a duplicate of a message we're already showing
+  const shouldShowStreamingMessage = useCallback(() => {
+    if (!currentStreamingMessage) return false;
+
+    // Don't show streaming message if there's a final message with the same content
+    const isDuplicate = chatHistory.some(
+      (msg) =>
+        // Check if content is the same (exact match)
+        msg.content === currentStreamingMessage.content ||
+        // Or if the streaming content is contained within a final message
+        // (handles cases where the final message might have additional formatting)
+        msg.content.includes(currentStreamingMessage.content) ||
+        // Or if the streaming message contains the final message content
+        // (handles cases where the streaming message is more complete)
+        currentStreamingMessage.content.includes(msg.content)
+    );
+
+    return !isDuplicate;
+  }, [chatHistory, currentStreamingMessage]);
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -95,7 +84,7 @@ export default function FloatingChat({
         scrollElement.scrollTop = scrollElement.scrollHeight;
       }
     }
-  }, [messages]);
+  }, [chatHistory, currentStreamingMessage]);
 
   // Format timestamp to a readable time
   const formatTime = (date: Date) => {
@@ -148,48 +137,107 @@ export default function FloatingChat({
           ref={scrollAreaRef}
         >
           <div className="space-y-4">
-            {messages.length === 0 ? (
+            {chatHistory.length === 0 && !currentStreamingMessage ? (
               <div className="text-center text-gray-500 py-8">
                 No messages yet. Start speaking to see the transcript.
               </div>
             ) : (
-              messages.map((message) => (
-                <div
-                  key={message.id}
-                  className={`flex items-start gap-3 ${
-                    message.sender === 'user' ? 'flex-row-reverse' : ''
-                  }`}
-                >
-                  <Avatar className="mt-0.5 flex-shrink-0">
-                    <AvatarImage
-                      src={message.avatar}
-                      alt={message.sender === 'user' ? 'User' : 'AI'}
-                    />
-                    <AvatarFallback>
-                      {message.sender === 'user' ? 'U' : 'AI'}
-                    </AvatarFallback>
-                  </Avatar>
-
+              <>
+                {/* Display all completed messages in the history */}
+                {chatHistory.map((message) => (
                   <div
-                    className={`flex flex-col ${
-                      message.sender === 'user' ? 'items-end' : 'items-start'
+                    key={message.id}
+                    className={`flex items-start gap-3 ${
+                      message.sender === 'user' ? 'flex-row-reverse' : ''
                     }`}
                   >
+                    <Avatar className="mt-0.5 flex-shrink-0">
+                      <AvatarImage
+                        src={message.avatar}
+                        alt={message.sender === 'user' ? 'User' : 'AI'}
+                      />
+                      <AvatarFallback>
+                        {message.sender === 'user' ? 'U' : 'AI'}
+                      </AvatarFallback>
+                    </Avatar>
+
                     <div
-                      className={`px-4 py-2 rounded-lg max-w-[80%] ${
-                        message.sender === 'user'
-                          ? 'bg-primary text-primary-foreground rounded-tr-none'
-                          : 'bg-muted text-black rounded-tl-none'
+                      className={`flex flex-col ${
+                        message.sender === 'user' ? 'items-end' : 'items-start'
                       }`}
                     >
-                      <p className="text-sm">{message.content}</p>
+                      <div
+                        className={`px-4 py-2 rounded-lg max-w-[80%] ${
+                          message.sender === 'user'
+                            ? 'bg-gray-200 text-black rounded-tr-none'
+                            : 'bg-blue-500 text-white rounded-tl-none'
+                        }`}
+                      >
+                        <p className="text-sm">{message.content}</p>
+                      </div>
+                      <span className="text-xs text-muted-foreground mt-1">
+                        {formatTime(message.timestamp)}
+                      </span>
                     </div>
-                    <span className="text-xs text-muted-foreground mt-1">
-                      {formatTime(message.timestamp)}
-                    </span>
                   </div>
+                ))}
+
+                {/* Display the currently streaming message if it's not a duplicate */}
+                {currentStreamingMessage && shouldShowStreamingMessage() && (
+                  <div
+                    key={`streaming-${currentStreamingMessage.id}`}
+                    className={`flex items-start gap-3 ${
+                      currentStreamingMessage.sender === 'user'
+                        ? 'flex-row-reverse'
+                        : ''
+                    }`}
+                  >
+                    <Avatar className="mt-0.5 flex-shrink-0">
+                      <AvatarImage
+                        src={currentStreamingMessage.avatar}
+                        alt={
+                          currentStreamingMessage.sender === 'user'
+                            ? 'User'
+                            : 'AI'
+                        }
+                      />
+                      <AvatarFallback>
+                        {currentStreamingMessage.sender === 'user' ? 'U' : 'AI'}
+                      </AvatarFallback>
+                    </Avatar>
+
+                    <div
+                      className={`flex flex-col ${
+                        currentStreamingMessage.sender === 'user'
+                          ? 'items-end'
+                          : 'items-start'
+                      }`}
+                    >
+                      <div
+                        className={`px-4 py-2 rounded-lg max-w-[80%] ${
+                          currentStreamingMessage.sender === 'user'
+                            ? 'bg-gray-200 text-black rounded-tr-none'
+                            : 'bg-blue-500 text-white rounded-tl-none'
+                        } border-l-4 border-blue-500`}
+                      >
+                        <p className="text-sm">
+                          {currentStreamingMessage.content}
+                        </p>
+                      </div>
+                      <span className="text-xs text-muted-foreground mt-1">
+                        {formatTime(currentStreamingMessage.timestamp)}{' '}
+                        (typing...)
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Debugging info - can be removed in production */}
+                <div className="mt-4 pt-2 border-t text-xs text-gray-500">
+                  <p>Total messages: {chatHistory.length}</p>
+                  <p>Streaming: {currentStreamingMessage ? 'Yes' : 'No'}</p>
                 </div>
-              ))
+              </>
             )}
           </div>
         </ScrollArea>

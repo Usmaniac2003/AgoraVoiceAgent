@@ -19,6 +19,21 @@ import type {
   StopConversationRequest,
   ClientStartRequest,
 } from '../types/conversation';
+import FloatingChat from './Floating-Chat';
+import protoRoot from '@/protobuf/SttMessage_es6.js';
+
+// Define the message type
+export type StreamMessage = {
+  uid: UID;
+  content: string;
+  timestamp: string;
+  id: string;
+  avatar?: string;
+  sender?: 'user' | 'ai';
+  isFinal?: boolean;
+};
+
+const MESSAGE_BUFFER: { [key: string]: string } = {};
 
 export default function ConversationComponent({
   agoraData,
@@ -34,6 +49,7 @@ export default function ConversationComponent({
   const [isConnecting, setIsConnecting] = useState(false);
   const agentUID = process.env.NEXT_PUBLIC_AGENT_UID;
   const [joinedUID, setJoinedUID] = useState<UID>(0);
+  const [messages, setMessages] = useState<StreamMessage[]>([]);
 
   // Join the channel using the useJoin hook
   const { isConnected: joinSuccess } = useJoin(
@@ -93,7 +109,202 @@ export default function ConversationComponent({
   // Connection state changes
   useClientEvent(client, 'connection-state-change', (curState, prevState) => {
     console.log(`Connection state changed from ${prevState} to ${curState}`);
+
+    if (curState === 'DISCONNECTED') {
+      console.log('Attempting to reconnect...');
+    }
   });
+
+  // Listen for the 'stream-message' event
+  useClientEvent(client, 'stream-message', (remoteUser, data) => {
+    try {
+      console.log('Received stream message from UID:', remoteUser);
+
+      // Try to decode with protobuf first
+      try {
+        const textMessage =
+          protoRoot.Agora.SpeechToText.lookup('Text').decode(data);
+        console.log('Decoded protobuf message:', {
+          text: textMessage.words
+            ?.map((w: { text: string }) => w.text)
+            .join(' '),
+          isFinal: textMessage.words?.[0]?.is_final,
+          raw: textMessage,
+        });
+
+        // Check if this is a final message
+        const isFinal =
+          textMessage.words &&
+          textMessage.words.length > 0 &&
+          textMessage.words[0].is_final;
+
+        // Extract text from words array if available
+        let messageContent = '';
+        if (textMessage.words && textMessage.words.length > 0) {
+          messageContent = textMessage.words
+            .map((word: { text: string }) => word.text)
+            .join(' ');
+        } else {
+          // Fallback to text decoder
+          throw new Error('No words in protobuf message');
+        }
+
+        // Create message object
+        const messageObj: StreamMessage = {
+          uid: remoteUser,
+          content: messageContent,
+          timestamp: new Date().toLocaleTimeString(),
+          sender: remoteUser.toString() === agentUID ? 'ai' : 'user',
+          isFinal,
+          id: Date.now().toString(),
+        };
+
+        // Update messages state
+        setMessages((prevMessages) => {
+          // If this is a final message or we don't have any messages yet
+          if (isFinal || prevMessages.length === 0) {
+            return [...prevMessages, messageObj];
+          }
+
+          // For non-final messages, update the last message if it's from the same sender
+          const lastMessage = prevMessages[prevMessages.length - 1];
+          if (
+            !lastMessage.isFinal &&
+            lastMessage.sender === messageObj.sender
+          ) {
+            const updatedMessages = [...prevMessages];
+            updatedMessages[updatedMessages.length - 1] = messageObj;
+            return updatedMessages;
+          }
+
+          return [...prevMessages, messageObj];
+        });
+      } catch (protoError) {
+        console.warn('Failed to decode with protobuf:', protoError);
+
+        // Fallback to regular text decoding
+        const decodedText = new TextDecoder().decode(data);
+        console.log('Fallback decoded text:', decodedText);
+
+        try {
+          // Try to parse the base64 message format
+          const messageParts = decodedText.split('|');
+          if (messageParts.length >= 4) {
+            console.log('Message parts:', {
+              messageId: messageParts[0],
+              // Log other parts if needed
+              base64Data: messageParts[3].substring(0, 100) + '...', // Log first 100 chars
+            });
+
+            const messageId = messageParts[0];
+            const base64Data = messageParts[3];
+
+            try {
+              // Decode the base64 data
+              const jsonText = atob(base64Data);
+              console.log('Decoded base64 to JSON text:', jsonText);
+
+              // Try to parse as complete JSON first
+              try {
+                const jsonData = JSON.parse(jsonText);
+                console.log('Successfully parsed complete JSON:', jsonData);
+                processJsonMessage(jsonData, messageId, remoteUser);
+              } catch (jsonError) {
+                console.log('Partial JSON received, buffering:', {
+                  messageId,
+                  currentBuffer: MESSAGE_BUFFER[messageId],
+                  newData: jsonText,
+                });
+
+                // If JSON parsing fails, it might be a partial message
+                if (!MESSAGE_BUFFER[messageId]) {
+                  MESSAGE_BUFFER[messageId] = '';
+                }
+
+                // Append new data to buffer
+                MESSAGE_BUFFER[messageId] += jsonText;
+
+                // Try to parse the accumulated buffer
+                try {
+                  const completeJson = JSON.parse(MESSAGE_BUFFER[messageId]);
+                  processJsonMessage(completeJson, messageId, remoteUser);
+                  // Clear buffer after successful parse
+                  delete MESSAGE_BUFFER[messageId];
+                } catch (bufferError) {
+                  // Still incomplete, wait for more data
+                  console.log(
+                    'Accumulated partial message:',
+                    MESSAGE_BUFFER[messageId].substring(0, 100) + '...'
+                  );
+                }
+              }
+            } catch (base64Error) {
+              console.error('Base64 decode error:', base64Error);
+            }
+          }
+        } catch (error) {
+          console.error('Error processing message:', error);
+        }
+      }
+    } catch (error) {
+      console.error('Error in stream message handler:', error);
+    }
+  });
+
+  // Add this helper function to process complete JSON messages
+  const processJsonMessage = (
+    jsonData: any,
+    messageId: string,
+    remoteUser: UID
+  ) => {
+    console.log('Processing JSON message:', {
+      messageId,
+      jsonData,
+      remoteUser,
+      currentUID: joinedUID,
+    });
+
+    if (!jsonData.text) {
+      console.log('Skipping message - no text content');
+      return;
+    }
+
+    // Determine sender based on user_id field
+    let sender: 'user' | 'ai' = 'ai';
+    if (jsonData.user_id && jsonData.user_id === joinedUID.toString()) {
+      sender = 'user';
+    }
+
+    const messageObj: StreamMessage = {
+      uid: remoteUser,
+      content: jsonData.text,
+      timestamp: new Date().toLocaleTimeString(),
+      sender,
+      isFinal: jsonData.is_final || false,
+      id: messageId,
+    };
+
+    // Update messages state with proper handling of streaming updates
+    setMessages((prevMessages) => {
+      const existingIndex = prevMessages.findIndex(
+        (msg) => msg.id === messageId
+      );
+
+      if (existingIndex >= 0) {
+        // Update existing message
+        const updatedMessages = [...prevMessages];
+        updatedMessages[existingIndex] = {
+          ...updatedMessages[existingIndex],
+          content: messageObj.content,
+          isFinal: messageObj.isFinal,
+        };
+        return updatedMessages;
+      }
+
+      // Add new message
+      return [...prevMessages, messageObj];
+    });
+  };
 
   // Cleanup on unmount
   useEffect(() => {
@@ -248,6 +459,9 @@ export default function ConversationComponent({
           localMicrophoneTrack={localMicrophoneTrack}
         />
       </div>
+
+      {/* Add the FloatingChat component */}
+      <FloatingChat streamMessages={messages} agentUID={agentUID} />
     </div>
   );
 }

@@ -23,13 +23,14 @@ export default function FloatingChat({
   currentInProgressMessage = null,
   agentUID,
 }: FloatingChatProps) {
-  const [isOpen, setIsOpen] = useState(true);
+  const [isOpen, setIsOpen] = useState(false);
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastMessageRef = useRef<HTMLDivElement>(null);
   const prevMessageLengthRef = useRef(messageList.length);
   const prevMessageTextRef = useRef('');
   const [isChatExpanded, setIsChatExpanded] = useState(false);
+  const hasSeenFirstMessageRef = useRef(false);
 
   // Scroll to bottom function for direct calls
   const scrollToBottom = () => {
@@ -64,6 +65,23 @@ export default function FloatingChat({
 
     return hasSignificantChange;
   };
+
+  // Effect for auto-opening chat when first streaming message arrives
+  useEffect(() => {
+    // Check if this is the first message and chat should be opened
+    const hasNewMessage = messageList.length > 0;
+    const hasInProgressMessage =
+      shouldShowStreamingMessage() && currentInProgressMessage !== null;
+
+    if (
+      (hasNewMessage || hasInProgressMessage) &&
+      !hasSeenFirstMessageRef.current &&
+      !isOpen
+    ) {
+      setIsOpen(true);
+      hasSeenFirstMessageRef.current = true;
+    }
+  }, [messageList, currentInProgressMessage]);
 
   useEffect(() => {
     // Auto-scroll in these cases:
@@ -106,6 +124,10 @@ export default function FloatingChat({
   // Toggle chat open/closed
   const toggleChat = () => {
     setIsOpen(!isOpen);
+    // If opening the chat, consider it as having seen the first message
+    if (!isOpen) {
+      hasSeenFirstMessageRef.current = true;
+    }
   };
 
   const toggleChatExpanded = () => {
@@ -128,7 +150,6 @@ export default function FloatingChat({
           )}
         >
           <div className="p-2 border-b flex justify-between items-center shrink-0">
-            <h3 className="font-semibold">Chat</h3>
             <Button variant="ghost" size="icon" onClick={toggleChatExpanded}>
               {isChatExpanded ? (
                 <ArrowDownFromLine className="h-4 w-4" />
@@ -136,6 +157,7 @@ export default function FloatingChat({
                 <UnfoldVertical className="h-4 w-4" />
               )}
             </Button>
+            <h3 className="font-semibold">Chat</h3>
             <Button variant="ghost" size="icon" onClick={toggleChat}>
               <X className="h-4 w-4" />
             </Button>

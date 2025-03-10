@@ -20,7 +20,6 @@ import type {
   ClientStartRequest,
 } from '../types/conversation';
 import FloatingChat from './Floating-Chat';
-import protoRoot from '@/protobuf/SttMessage_es6.js';
 import {
   MessageEngine,
   IMessageListItem,

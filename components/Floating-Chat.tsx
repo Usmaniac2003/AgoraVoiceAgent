@@ -110,7 +110,7 @@ export default function FloatingChat({
                   ref={index === allMessages.length - 1 ? lastMessageRef : null}
                   className={cn(
                     'flex flex-col',
-                    message.uid.toString() === agentUID
+                    message.uid === 0 || message.uid.toString() === agentUID
                       ? 'items-start'
                       : 'items-end'
                   )}
@@ -118,7 +118,7 @@ export default function FloatingChat({
                   <div
                     className={cn(
                       'rounded-lg px-3 py-2 max-w-[80%]',
-                      message.uid.toString() === agentUID
+                      message.uid === 0 || message.uid.toString() === agentUID
                         ? 'bg-gray-100'
                         : 'bg-blue-500 text-white',
                       message.status === EMessageStatus.IN_PROGRESS &&

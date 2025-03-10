@@ -18,17 +18,17 @@ import type {
   ConversationComponentProps,
   StopConversationRequest,
   ClientStartRequest,
-} from '../types/conversation';
+} from '@/types/conversation';
 import FloatingChat from './Floating-Chat';
 import {
   MessageEngine,
   IMessageListItem,
   EMessageStatus,
   EMessageEngineMode,
-} from '../lib/message';
+} from '@/lib/message';
 
 // Export EMessageStatus for use in other components
-export { EMessageStatus } from '../lib/message';
+export { EMessageStatus } from '@/lib/message';
 
 const MESSAGE_BUFFER: { [key: string]: string } = {};
 
@@ -65,24 +65,35 @@ export default function ConversationComponent({
   // Initialize MessageEngine when client is ready
   useEffect(() => {
     if (client && !messageEngineRef.current) {
-      // Create message engine with AUTO mode
+      // Create message engine with WORD mode for better streaming
       const messageEngine = new MessageEngine(
         client,
         EMessageEngineMode.AUTO,
         // Callback to handle message list updates
         (updatedMessages: IMessageListItem[]) => {
-          setMessageList(updatedMessages);
-          // Find any in-progress message
-          const inProgressMsg = updatedMessages.find(
+          // Sort messages by turn_id to maintain order
+          const sortedMessages = [...updatedMessages].sort(
+            (a, b) => a.turn_id - b.turn_id
+          );
+
+          // Find the latest in-progress message
+          const inProgressMsg = sortedMessages.find(
             (msg) => msg.status === EMessageStatus.IN_PROGRESS
+          );
+
+          // Update states
+          setMessageList(
+            sortedMessages.filter(
+              (msg) => msg.status !== EMessageStatus.IN_PROGRESS
+            )
           );
           setCurrentInProgressMessage(inProgressMsg || null);
         }
       );
 
       messageEngineRef.current = messageEngine;
-      messageEngineRef.current.run();
-      console.log('MessageEngine initialized');
+      messageEngineRef.current.run({ legacyMode: false });
+      console.log('MessageEngine initialized in WORD mode');
     }
 
     return () => {

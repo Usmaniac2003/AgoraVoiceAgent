@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import {
   MessageCircle,
@@ -29,7 +28,15 @@ export default function FloatingChat({
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastMessageRef = useRef<HTMLDivElement>(null);
   const prevMessageLengthRef = useRef(messageList.length);
+  const prevMessageTextRef = useRef('');
   const [isChatExpanded, setIsChatExpanded] = useState(false);
+
+  // Scroll to bottom function for direct calls
+  const scrollToBottom = () => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  };
 
   const handleScroll = () => {
     if (scrollRef.current) {
@@ -39,18 +46,54 @@ export default function FloatingChat({
     }
   };
 
-  useEffect(() => {
-    // Auto-scroll if new message arrived or if we should auto-scroll during streaming
-    const hasNewMessage = messageList.length > prevMessageLengthRef.current;
-    if (
-      (hasNewMessage || shouldAutoScroll) &&
-      scrollRef.current &&
-      lastMessageRef.current
-    ) {
-      lastMessageRef.current.scrollIntoView({ behavior: 'smooth' });
+  // Check if streaming content has significantly changed
+  const hasContentChanged = () => {
+    if (!currentInProgressMessage) return false;
+
+    const currentText = currentInProgressMessage.text || '';
+    const textLengthDiff =
+      currentText.length - prevMessageTextRef.current.length;
+
+    // Consider significant change if more than 20 new characters
+    const hasSignificantChange = textLengthDiff > 20;
+
+    // Update reference
+    if (hasSignificantChange) {
+      prevMessageTextRef.current = currentText;
     }
+
+    return hasSignificantChange;
+  };
+
+  useEffect(() => {
+    // Auto-scroll in these cases:
+    // 1. New complete message arrived
+    // 2. User is already at bottom
+    // 3. Streaming content has changed significantly
+    const hasNewMessage = messageList.length > prevMessageLengthRef.current;
+    const hasStreamingChange = hasContentChanged();
+
+    if (
+      (hasNewMessage || shouldAutoScroll || hasStreamingChange) &&
+      scrollRef.current
+    ) {
+      // Use direct scroll to bottom for more reliable scrolling
+      scrollToBottom();
+    }
+
     prevMessageLengthRef.current = messageList.length;
   }, [messageList, currentInProgressMessage?.text, shouldAutoScroll]);
+
+  // Extra safety: ensure scroll happens after content renders during active streaming
+  useEffect(() => {
+    if (
+      currentInProgressMessage?.status === EMessageStatus.IN_PROGRESS &&
+      shouldAutoScroll
+    ) {
+      const timer = setTimeout(scrollToBottom, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [currentInProgressMessage?.text]);
 
   const shouldShowStreamingMessage = () => {
     return (
@@ -109,23 +152,47 @@ export default function FloatingChat({
                   key={`${message.turn_id}-${message.uid}-${message.status}`}
                   ref={index === allMessages.length - 1 ? lastMessageRef : null}
                   className={cn(
-                    'flex flex-col',
+                    'flex items-start gap-2 w-full',
                     message.uid === 0 || message.uid.toString() === agentUID
-                      ? 'items-start'
-                      : 'items-end'
+                      ? 'flex-row'
+                      : 'flex-row-reverse'
                   )}
                 >
+                  {/* Avatar */}
                   <div
                     className={cn(
-                      'rounded-lg px-3 py-2 max-w-[80%]',
+                      'flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium',
                       message.uid === 0 || message.uid.toString() === agentUID
-                        ? 'bg-gray-100'
-                        : 'bg-blue-500 text-white',
-                      message.status === EMessageStatus.IN_PROGRESS &&
-                        'animate-pulse'
+                        ? 'bg-purple-100 text-purple-700'
+                        : 'bg-blue-100 text-blue-700'
                     )}
                   >
-                    {message.text}
+                    {message.uid === 0 || message.uid.toString() === agentUID
+                      ? 'AI'
+                      : 'U'}
+                  </div>
+
+                  {/* Message content */}
+                  <div
+                    className={cn(
+                      'flex',
+                      message.uid === 0 || message.uid.toString() === agentUID
+                        ? 'flex-col items-start'
+                        : 'flex-col items-end'
+                    )}
+                  >
+                    <div
+                      className={cn(
+                        'rounded-[15px] px-3 py-2',
+                        message.uid === 0 || message.uid.toString() === agentUID
+                          ? 'bg-gray-100 text-left'
+                          : 'bg-blue-500 text-white text-right',
+                        message.status === EMessageStatus.IN_PROGRESS &&
+                          'animate-pulse'
+                      )}
+                    >
+                      {message.text}
+                    </div>
                   </div>
                 </div>
               ))}

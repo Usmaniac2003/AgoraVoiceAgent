@@ -18,3 +18,11 @@ body {
     rgb(var(--background-start-rgb));
 }
 
+.chatbox {
+  height: 300px;
+  transition: height 0.3s ease-in-out;
+}
+
+.chatbox.expanded {
+  height: 600px;
+}

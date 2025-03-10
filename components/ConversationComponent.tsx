@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   useRTCClient,
   useLocalMicrophoneTrack,
@@ -18,20 +18,17 @@ import type {
   ConversationComponentProps,
   StopConversationRequest,
   ClientStartRequest,
-} from '../types/conversation';
+} from '@/types/conversation';
 import FloatingChat from './Floating-Chat';
-import protoRoot from '@/protobuf/SttMessage_es6.js';
+import {
+  MessageEngine,
+  IMessageListItem,
+  EMessageStatus,
+  EMessageEngineMode,
+} from '@/lib/message';
 
-// Define the message type
-export type StreamMessage = {
-  uid: UID;
-  content: string;
-  timestamp: string;
-  id: string;
-  avatar?: string;
-  sender?: 'user' | 'ai';
-  isFinal?: boolean;
-};
+// Export EMessageStatus for use in other components
+export { EMessageStatus } from '@/lib/message';
 
 const MESSAGE_BUFFER: { [key: string]: string } = {};
 
@@ -49,7 +46,10 @@ export default function ConversationComponent({
   const [isConnecting, setIsConnecting] = useState(false);
   const agentUID = process.env.NEXT_PUBLIC_AGENT_UID;
   const [joinedUID, setJoinedUID] = useState<UID>(0);
-  const [messages, setMessages] = useState<StreamMessage[]>([]);
+  const [messageList, setMessageList] = useState<IMessageListItem[]>([]);
+  const [currentInProgressMessage, setCurrentInProgressMessage] =
+    useState<IMessageListItem | null>(null);
+  const messageEngineRef = useRef<MessageEngine | null>(null);
 
   // Join the channel using the useJoin hook
   const { isConnected: joinSuccess } = useJoin(
@@ -61,6 +61,49 @@ export default function ConversationComponent({
     },
     true
   );
+
+  // Initialize MessageEngine when client is ready
+  useEffect(() => {
+    if (client && !messageEngineRef.current) {
+      // Create message engine with WORD mode for better streaming
+      const messageEngine = new MessageEngine(
+        client,
+        EMessageEngineMode.AUTO,
+        // Callback to handle message list updates
+        (updatedMessages: IMessageListItem[]) => {
+          // Sort messages by turn_id to maintain order
+          const sortedMessages = [...updatedMessages].sort(
+            (a, b) => a.turn_id - b.turn_id
+          );
+
+          // Find the latest in-progress message
+          const inProgressMsg = sortedMessages.find(
+            (msg) => msg.status === EMessageStatus.IN_PROGRESS
+          );
+
+          // Update states
+          setMessageList(
+            sortedMessages.filter(
+              (msg) => msg.status !== EMessageStatus.IN_PROGRESS
+            )
+          );
+          setCurrentInProgressMessage(inProgressMsg || null);
+        }
+      );
+
+      messageEngineRef.current = messageEngine;
+      messageEngineRef.current.run({ legacyMode: false });
+      console.log('MessageEngine initialized in WORD mode');
+    }
+
+    return () => {
+      // Clean up MessageEngine on component unmount
+      if (messageEngineRef.current) {
+        messageEngineRef.current.cleanup();
+        messageEngineRef.current = null;
+      }
+    };
+  }, [client]);
 
   // Update actualUID when join is successful
   useEffect(() => {
@@ -115,197 +158,6 @@ export default function ConversationComponent({
     }
   });
 
-  // Listen for the 'stream-message' event
-  useClientEvent(client, 'stream-message', (remoteUser, data) => {
-    try {
-      console.log('Received stream message from UID:', remoteUser);
-
-      // Try to decode with protobuf first
-      try {
-        const textMessage =
-          protoRoot.Agora.SpeechToText.lookup('Text').decode(data);
-        console.log('Decoded protobuf message:', {
-          text: textMessage.words
-            ?.map((w: { text: string }) => w.text)
-            .join(' '),
-          isFinal: textMessage.words?.[0]?.is_final,
-          raw: textMessage,
-        });
-
-        // Check if this is a final message
-        const isFinal =
-          textMessage.words &&
-          textMessage.words.length > 0 &&
-          textMessage.words[0].is_final;
-
-        // Extract text from words array if available
-        let messageContent = '';
-        if (textMessage.words && textMessage.words.length > 0) {
-          messageContent = textMessage.words
-            .map((word: { text: string }) => word.text)
-            .join(' ');
-        } else {
-          // Fallback to text decoder
-          throw new Error('No words in protobuf message');
-        }
-
-        // Create message object
-        const messageObj: StreamMessage = {
-          uid: remoteUser,
-          content: messageContent,
-          timestamp: new Date().toLocaleTimeString(),
-          sender: remoteUser.toString() === agentUID ? 'ai' : 'user',
-          isFinal,
-          id: Date.now().toString(),
-        };
-
-        // Update messages state
-        setMessages((prevMessages) => {
-          // If this is a final message or we don't have any messages yet
-          if (isFinal || prevMessages.length === 0) {
-            return [...prevMessages, messageObj];
-          }
-
-          // For non-final messages, update the last message if it's from the same sender
-          const lastMessage = prevMessages[prevMessages.length - 1];
-          if (
-            !lastMessage.isFinal &&
-            lastMessage.sender === messageObj.sender
-          ) {
-            const updatedMessages = [...prevMessages];
-            updatedMessages[updatedMessages.length - 1] = messageObj;
-            return updatedMessages;
-          }
-
-          return [...prevMessages, messageObj];
-        });
-      } catch (protoError) {
-        console.warn('Failed to decode with protobuf:', protoError);
-
-        // Fallback to regular text decoding
-        const decodedText = new TextDecoder().decode(data);
-        console.log('Fallback decoded text:', decodedText);
-
-        try {
-          // Try to parse the base64 message format
-          const messageParts = decodedText.split('|');
-          if (messageParts.length >= 4) {
-            console.log('Message parts:', {
-              messageId: messageParts[0],
-              // Log other parts if needed
-              base64Data: messageParts[3].substring(0, 100) + '...', // Log first 100 chars
-            });
-
-            const messageId = messageParts[0];
-            const base64Data = messageParts[3];
-
-            try {
-              // Decode the base64 data
-              const jsonText = atob(base64Data);
-              console.log('Decoded base64 to JSON text:', jsonText);
-
-              // Try to parse as complete JSON first
-              try {
-                const jsonData = JSON.parse(jsonText);
-                console.log('Successfully parsed complete JSON:', jsonData);
-                processJsonMessage(jsonData, messageId, remoteUser);
-              } catch (jsonError) {
-                console.log('Partial JSON received, buffering:', {
-                  messageId,
-                  currentBuffer: MESSAGE_BUFFER[messageId],
-                  newData: jsonText,
-                });
-
-                // If JSON parsing fails, it might be a partial message
-                if (!MESSAGE_BUFFER[messageId]) {
-                  MESSAGE_BUFFER[messageId] = '';
-                }
-
-                // Append new data to buffer
-                MESSAGE_BUFFER[messageId] += jsonText;
-
-                // Try to parse the accumulated buffer
-                try {
-                  const completeJson = JSON.parse(MESSAGE_BUFFER[messageId]);
-                  processJsonMessage(completeJson, messageId, remoteUser);
-                  // Clear buffer after successful parse
-                  delete MESSAGE_BUFFER[messageId];
-                } catch (bufferError) {
-                  // Still incomplete, wait for more data
-                  console.log(
-                    'Accumulated partial message:',
-                    MESSAGE_BUFFER[messageId].substring(0, 100) + '...'
-                  );
-                }
-              }
-            } catch (base64Error) {
-              console.error('Base64 decode error:', base64Error);
-            }
-          }
-        } catch (error) {
-          console.error('Error processing message:', error);
-        }
-      }
-    } catch (error) {
-      console.error('Error in stream message handler:', error);
-    }
-  });
-
-  // Add this helper function to process complete JSON messages
-  const processJsonMessage = (
-    jsonData: any,
-    messageId: string,
-    remoteUser: UID
-  ) => {
-    console.log('Processing JSON message:', {
-      messageId,
-      jsonData,
-      remoteUser,
-      currentUID: joinedUID,
-    });
-
-    if (!jsonData.text) {
-      console.log('Skipping message - no text content');
-      return;
-    }
-
-    // Determine sender based on user_id field
-    let sender: 'user' | 'ai' = 'ai';
-    if (jsonData.user_id && jsonData.user_id === joinedUID.toString()) {
-      sender = 'user';
-    }
-
-    const messageObj: StreamMessage = {
-      uid: remoteUser,
-      content: jsonData.text,
-      timestamp: new Date().toLocaleTimeString(),
-      sender,
-      isFinal: jsonData.is_final || false,
-      id: messageId,
-    };
-
-    // Update messages state with proper handling of streaming updates
-    setMessages((prevMessages) => {
-      const existingIndex = prevMessages.findIndex(
-        (msg) => msg.id === messageId
-      );
-
-      if (existingIndex >= 0) {
-        // Update existing message
-        const updatedMessages = [...prevMessages];
-        updatedMessages[existingIndex] = {
-          ...updatedMessages[existingIndex],
-          content: messageObj.content,
-          isFinal: messageObj.isFinal,
-        };
-        return updatedMessages;
-      }
-
-      // Add new message
-      return [...prevMessages, messageObj];
-    });
-  };
-
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -313,13 +165,11 @@ export default function ConversationComponent({
     };
   }, [client]);
 
+  // Handle conversation actions
   const handleStopConversation = async () => {
-    if (!isAgentConnected || !agoraData.agentId) return;
-    setIsConnecting(true);
-
     try {
       const stopRequest: StopConversationRequest = {
-        agent_id: agoraData.agentId,
+        agent_id: agoraData.agentId!,
       };
 
       const response = await fetch('/api/stop-conversation', {
@@ -334,13 +184,12 @@ export default function ConversationComponent({
         throw new Error(`Failed to stop conversation: ${response.statusText}`);
       }
 
-      // Wait for the agent to actually leave before resetting state
-      // The user-left event handler will handle setting isAgentConnected to false
-    } catch (error) {
-      if (error instanceof Error) {
-        console.warn('Error stopping conversation:', error.message);
+      setIsAgentConnected(false);
+      if (onEndConversation) {
+        onEndConversation();
       }
-      setIsConnecting(false);
+    } catch (error) {
+      console.error('Error stopping conversation:', error);
     }
   };
 
@@ -379,6 +228,16 @@ export default function ConversationComponent({
       }
       // Reset connecting state if there's an error
       setIsConnecting(false);
+    }
+  };
+
+  // Toggle microphone functionality
+  const handleMicrophoneToggle = async (isOn: boolean) => {
+    setIsEnabled(isOn);
+
+    if (isOn && !isAgentConnected) {
+      // Start conversation when microphone is turned on
+      await handleStartConversation();
     }
   };
 
@@ -460,8 +319,12 @@ export default function ConversationComponent({
         />
       </div>
 
-      {/* Add the FloatingChat component */}
-      <FloatingChat streamMessages={messages} agentUID={agentUID} />
+      {/* Floating chat component */}
+      <FloatingChat
+        messageList={messageList}
+        currentInProgressMessage={currentInProgressMessage}
+        agentUID={agentUID}
+      />
     </div>
   );
 }

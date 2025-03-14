@@ -1,14 +1,14 @@
 # Building an AI Conversation App with Next.js and Agora
 
-Conversation AI is all the hype. It allows you to have a real-time conversation with an AI agent, and actually get something done without wasting time typing out your thoughts and trying to format them into a clever prompt. It’s a major shift in the way people interact with AI.
+Conversation AI is all the hype. It allows you to have a real-time conversation with an AI agent, and actually get something done without wasting time typing out your thoughts and trying to format them into a clever prompt. It's a major shift in the way people interact with AI.
 
-But given the investment that developers and businesses have made in building their own text based agents that run through custom LLM workflows, there’s reluctance to adopt this new paradigm. Especially if it means having to give up all that investment or event worse, hobble it by only connecting them as tools/function calls.
+But given the investment that developers and businesses have made in building their own text based agents that run through custom LLM workflows, there's reluctance to adopt this new paradigm. Especially if it means having to give up all that investment or event worse, hobble it by only connecting them as tools/function calls.
 
 This is why we built the Agora Conversational AI Engine. It allows you to connect your existing LLM workflows to an Agora channel, and have a real-time conversation with the AI agent.
 
-In this guide, we’ll build a real-time audio conversation application that connects users with an AI agent powered by Agora’s Conversational AI Engine. The app will be built with NextJS, React, and TypeScript. We’ll take an incremental approach, starting with the core real-time communication components and then add-in Agora’s Convo AI Engine.
+In this guide, we'll build a real-time audio conversation application that connects users with an AI agent powered by Agora's Conversational AI Engine. The app will be built with NextJS, React, and TypeScript. We'll take an incremental approach, starting with the core real-time communication components and then add-in Agora's Convo AI Engine.
 
-By the end of this guide, you will have a real-time audio conversation application that connects users with an AI agent powered by Agora’s Conversational AI Engine.
+By the end of this guide, you will have a real-time audio conversation application that connects users with an AI agent powered by Agora's Conversational AI Engine.
 
 ## Prerequisites
 
@@ -47,7 +47,7 @@ Next, install the required Agora dependencies:
 pnpm add agora-rtc-react agora-token
 ```
 
-For UI components, we’ll use shadcn/ui in this guide, but you can use any UI library of your choice or create custom components:
+For UI components, we'll use shadcn/ui in this guide, but you can use any UI library of your choice or create custom components:
 
 ```bash
 pnpm dlx shadcn@latest init
@@ -1546,7 +1546,7 @@ export default function ConversationComponent({
 
 ## Audio Visualization (Optional)
 
-Let’s add an audio visualization to give visual feedback to the user when the AI agent is speaking. Here’s an example of an audio visualizer component, that takes the Agora audio track as input for the animation.
+Let's add an audio visualization to give visual feedback to the user when the AI agent is speaking. Here's an example of an audio visualizer component, that takes the Agora audio track as input for the animation.
 
 Create a file at `components/AudioVisualizer.tsx`:
 
@@ -1793,7 +1793,7 @@ This creates a responsive visualization that makes it clear when the AI agent is
 
 ## Enhanced Microphone Button with Visualization
 
-Since we only have a single user and an AI in the channel we should also update our microphone button to include its own audio visualization. This gives the user visual feedback that their mic is capturing audio input. Let’s create a more sophisticated version of our `MicrophoneButton.tsx`:
+Since we only have a single user and an AI in the channel we should also update our microphone button to include its own audio visualization. This gives the user visual feedback that their mic is capturing audio input. Let's create a more sophisticated version of our `MicrophoneButton.tsx`:
 
 ```typescript
 'use client';

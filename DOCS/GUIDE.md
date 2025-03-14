@@ -1,8 +1,8 @@
-# Building an AI Conversation App with NextJS and Agora
+# Building an AI Conversation App with Next.js and Agora
 
-Conversation AI is the latest innovation in interacting with AI. It allows you to have a real-time conversation with an AI agent, and actually get something done without wasting time typing out your thoughts and trying to format them into a clever prompt.
+Conversation AI is all the hype. It allows you to have a real-time conversation with an AI agent, and actually get something done without wasting time typing out your thoughts and trying to format them into a clever prompt. It's a major shift in the way people interact with AI.
 
-But given the investment that developers and businesses have made in building their own text based agents that run through custom LLM workflows, no one want to adopt the new paradigm of conversational AI, if it means having to give up all that investment. Or event worse, hobble it by only connecting them as tools/function calls.
+But given the investment that developers and businesses have made in building their own text based agents that run through custom LLM workflows, there's reluctance to adopt this new paradigm. Especially if it means having to give up all that investment or event worse, hobble it by only connecting them as tools/function calls.
 
 This is why we built the Agora Conversational AI Engine. It allows you to connect your existing LLM workflows to an Agora channel, and have a real-time conversation with the AI agent.
 
@@ -12,7 +12,7 @@ By the end of this guide, you will have a real-time audio conversation applicati
 
 ## Prerequisites
 
-Before starting, for the guide you are going to need to have:
+Before starting, for the guide you're going to need to have:
 
 - Node.js (v18 or higher)
 - A basic understanding of React with TypeScript and NextJS.
@@ -296,7 +296,7 @@ This component is the foundation for our real-time audio communication, so let's
 - `usePublish`: Publishes our audio track to the channel so others can hear us
 - `useClientEvent`: Sets up event handlers for important events like users joining or leaving
 
-> **Note:** We are loading the APP_ID from the environment variables using the non-null assertion operator, so make sure to set it in your `.env.local` file.
+> **Note:** We are loading the `APP_ID` from the environment variables using the non-null assertion operator, so make sure to set it in `.env.local` file.
 
 We need to add this component to our `LandingPage.tsx` file. Start by importing the component, and then add it to the AgoraProvider component.
 
@@ -553,7 +553,7 @@ export default function LandingPage() {
 }
 ```
 
-> **Note:** Don't worry about any errors or warnings on the ConversationComponent for now, we'll fix them in the next step.
+> Don't worry about any errors or warnings on the ConversationComponent for now, we'll fix them in the next step.
 
 ### Updating the Conversation Component to Use Tokens
 
@@ -1041,9 +1041,9 @@ Since Agora supports multiple TTS providers, the TTS section includes the config
 
 Choose the TTS provider based on your needs. Once you choose a vendor, you'll also need to choose a voice. To help you get started, here are some links to the voice galleries for each provider:
 
-- **Microsoft Azure TTS**: Offers a wide range of natural-sounding voices: [Microsoft Azure TTS Voice Gallery](https://speech.microsoft.com/portal/voicegallery)
+- [Microsoft Azure TTS Voice Gallery](https://speech.microsoft.com/portal/voicegallery): Offers a wide range of natural-sounding voices.
 
-- **ElevenLabs TTS**: Known for highly realistic and emotional voices: [ElevenLabs Voice Library](https://elevenlabs.io/voice-library)
+- [ElevenLabs Voice Library](https://elevenlabs.io/voice-library): Known for highly realistic and emotional voices.
 
 > **Note:** This route loads a number of environment variables. Make sure to set these in your `.env.local` file. At the end of this guide, I've included a list of all the environment variables you'll need to set.
 
@@ -1546,7 +1546,7 @@ export default function ConversationComponent({
 
 ## Audio Visualization (Optional)
 
-As an enhancement, we can add audio visualization to provide visual feedback when the AI agent is speaking. Here's an example of an audio visualizer component, that takes the Agora audio track as input for the animation.
+Let's add an audio visualization to give visual feedback to the user when the AI agent is speaking. Here's an example of an audio visualizer component, that takes the Agora audio track as input for the animation.
 
 Create a file at `components/AudioVisualizer.tsx`:
 
@@ -1683,7 +1683,15 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ track }) => {
 };
 ```
 
-To use this visualizer with the remote user's audio track, update the RemoteUser rendering in the ConversationComponent:
+The visualizer works by:
+
+1. Taking an audio track from the Agora SDK through the `track` prop
+
+2. Extracting frequency data from the audio stream using the Web Audio API
+
+3. Rendering visual bars that respond to different frequency ranges in the audio
+
+To use this visualizer with the remote user's audio track, we need to update how we render the `RemoteUser` in the `ConversationComponent`:
 
 ```typescript
 // Inside the remoteUsers.map in ConversationComponent.tsx:
@@ -1703,7 +1711,7 @@ To use this visualizer with the remote user's audio track, update the RemoteUser
 
 ### Integrating the Audio Visualizer
 
-To fully integrate the audio visualizer with our conversation component, we need to:
+To integrate/wire-in the audio visualizer with our conversation component, we need to:
 
 1. Import the AudioVisualizer component
 2. Pass the appropriate audio track to it
@@ -1781,18 +1789,11 @@ return (
 );
 ```
 
-The visualizer works by:
-
-1. Receiving the audio track from the Agora SDK through the `track` prop
-2. Creating an audio analyzer using the Web Audio API
-3. Extracting frequency data from the audio stream
-4. Rendering visual bars that respond to different frequency ranges in the audio
-
-This creates a responsive visualization that makes it clear when the AI agent is speaking, improving the user experience by providing visual feedback alongside the audio.
+This creates a responsive visualization that makes it clear when the AI agent is speaking, which improves the user experience through visual feedback alongside the audio.
 
 ## Enhanced Microphone Button with Visualization
 
-We should also enhance our microphone button to include its own audio visualization. This provides users with visual feedback about their own audio input. Let's create a more sophisticated version of our `MicrophoneButton.tsx`:
+Since we only have a single user and an AI in the channel we should also update our microphone button to include its own audio visualization. This gives the user visual feedback that their mic is capturing audio input. Let's create a more sophisticated version of our `MicrophoneButton.tsx`:
 
 ```typescript
 'use client';

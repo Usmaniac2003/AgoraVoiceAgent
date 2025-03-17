@@ -1,6 +1,6 @@
-# Building an AI Conversation App with Next.js and Agora
+# Build a Conversational AI App with Next.js and Agora
 
-Conversation AI is all the hype. It allows you to have a real-time conversation with an AI agent, and actually get something done without wasting time typing out your thoughts and trying to format them into a clever prompt. It's a major shift in the way people interact with AI.
+Conversational AI is all the hype. It allows you to have a real-time conversation with an AI agent, and actually get something done without wasting time typing out your thoughts and trying to format them into a clever prompt. It's a major shift in the way people interact with AI.
 
 But given the investment that developers and businesses have made in building their own text based agents that run through custom LLM workflows, there's reluctance to adopt this new paradigm. Especially if it means having to give up all that investment or event worse, hobble it by only connecting them as tools/function calls.
 

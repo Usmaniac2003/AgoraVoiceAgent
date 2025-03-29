@@ -161,7 +161,7 @@ export async function POST(request: Request) {
             top_p: 0.95,
           },
           input_modalities: input_modalities || config.modalities.input,
-          output_modalities: output_modalities || config.modalities.output,
+          // output_modalities: output_modalities || config.modalities.output,
         },
         vad: {
           silence_duration_ms: 480,

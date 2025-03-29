@@ -91,6 +91,23 @@ pnpm dev
 
 4. Open your browser and navigate to `http://localhost:3000` to see the application in action.
 
+## Deployment to Vercel
+
+This project is configured for quick deployments to Vercel.
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FAgoraIO-Community%2Fconversational-ai-nextjs-client&project-name=conversational-ai-nextjs-client&repository-name=conversational-ai-nextjs-client&env=NEXT_PUBLIC_AGORA_APP_ID,NEXT_PUBLIC_AGORA_APP_CERTIFICATE,NEXT_PUBLIC_AGORA_CUSTOMER_ID,NEXT_PUBLIC_AGORA_CUSTOMER_SECRET,NEXT_PUBLIC_AGENT_UID,NEXT_PUBLIC_LLM_API_KEY,NEXT_PUBLIC_MICROSOFT_TTS_KEY,NEXT_PUBLIC_ELEVENLABS_API_KEY&envDescription=API%20keys%20needed%20for%20the%20application&envLink=https://github.com/AgoraIO-Community/conversational-ai-nextjs-client%23prerequisites&demo-title=Conversational%20AI%20Demo&demo-description=A%20Next.js-based%20web-app%20for%20conversational%20AI%20agents&demo-image=https://raw.githubusercontent.com/AgoraIO-Community/conversational-ai-nextjs-client/main/.github/assets/Conversation-Ai-Client.gif&defaultValues=NEXT_PUBLIC_AGORA_CONVO_AI_BASE_URL=https://api.agora.io/api/conversational-ai-agent/v2/projects/,NEXT_PUBLIC_LLM_URL=https://api.openai.com/v1/chat/completions,NEXT_PUBLIC_LLM_MODEL=gpt-4,NEXT_PUBLIC_TTS_VENDOR=microsoft,NEXT_PUBLIC_MICROSOFT_TTS_REGION=eastus,NEXT_PUBLIC_MICROSOFT_TTS_VOICE_NAME=en-US-AndrewMultilingualNeural,NEXT_PUBLIC_ELEVENLABS_VOICE_ID=XrExE9yKIg1WjnnlVkGX,NEXT_PUBLIC_ELEVENLABS_MODEL_ID=eleven_flash_v2_5,NEXT_PUBLIC_INPUT_MODALITIES=text,NEXT_PUBLIC_OUTPUT_MODALITIES=text%2Caudio)
+
+This will:
+
+1. Clone the repository to your GitHub account
+2. Create a new project on Vercel
+3. Prompt you to fill in the required environment variables:
+   - **Required**: Agora credentials (`NEXT_PUBLIC_AGORA_APP_ID`, `NEXT_PUBLIC_AGORA_APP_CERTIFICATE`, etc.)
+   - **Required**: LLM API key (`NEXT_PUBLIC_LLM_API_KEY`) - OpenAI API key by default
+   - **Required**: Either Microsoft TTS key (`NEXT_PUBLIC_MICROSOFT_TTS_KEY`) or ElevenLabs API key (`NEXT_PUBLIC_ELEVENLABS_API_KEY`)
+   - Other variables have defaults if values are not provided
+4. Deploy the application automatically
+
 ## Voice Options
 
 ### Microsoft TTS

@@ -22,7 +22,7 @@ Adding text streaming involves three main players in your codebase:
 2.  **The Face (`components/ConvoTextStream.tsx`)**: This is your UI component. It takes the processed messages from the `MessageEngine` and displays them prettily. Think chat bubbles, scrolling, and maybe some cool animations for streaming text. We provide an example, but feel free to customize it to match your app's look and feel.
 3.  **The Conductor (`components/ConversationComponent.tsx`)**: This is likely your existing component that handles the Agora RTC connection, microphone access, and manages the overall conversation flow. It acts as the central hub, connecting the `MessageEngine` to the UI (`ConvoTextStream`).
 
-Here's a simplified view of how they chat with each other:
+Here's a simplified view of how they communicate with each other:
 
 ```mermaid
 flowchart LR
@@ -40,10 +40,10 @@ Understanding how a single transcription message travels from the network to the
 
 ```mermaid
 graph LR
-    A[1. Raw Data Chunks Arrive] --> B(2. MessageEngine Decodes & Processes);
-    B --> C(3. Processed Message Queued);
-    C --> D(4. State Update Triggered);
-    D --> E(5. UI Renders the Update);
+    A[Raw Data Chunks Arrive] --> B(MessageEngine Decodes & Processes);
+    B --> C(Processed Message Queued);
+    C --> D(State Update Triggered);
+    D --> E(UI Renders the Update);
 
     subgraph RTC_Client [Agora RTC Client]
         A
@@ -542,7 +542,7 @@ Modify the `tailwindcss` classes within `ConvoTextStream.tsx` to match your app'
 
 ```typescript
 // Example: Change AI bubble color
-message.uid === 0 || message.uid.toString() === agentUID
+    message.uid === 0 || message.uid.toString() === agentUID
   ? 'bg-purple-100 text-purple-900' // Changed from gray
   : 'bg-blue-500 text-white',
 ```

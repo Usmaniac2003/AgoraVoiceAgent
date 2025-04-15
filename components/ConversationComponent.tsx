@@ -19,7 +19,7 @@ import type {
   StopConversationRequest,
   ClientStartRequest,
 } from '@/types/conversation';
-import FloatingChat from './Floating-Chat';
+import ConvoTextStream from './ConvoTextStream';
 import {
   MessageEngine,
   IMessageListItem,
@@ -319,8 +319,8 @@ export default function ConversationComponent({
         />
       </div>
 
-      {/* Floating chat component */}
-      <FloatingChat
+      {/* Conversation Text Stream component */}
+      <ConvoTextStream
         messageList={messageList}
         currentInProgressMessage={currentInProgressMessage}
         agentUID={agentUID}

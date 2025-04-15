@@ -1,175 +1,224 @@
-# Text Streaming in Conversational AI Applications
+# Let's Talk Text: Streaming Transcriptions in Your Conversational AI App
 
-This guide supplements the main [Conversational AI Guide](./GUIDE.md) and is focused specifically on implementing text streaming alongside real-time conversational AI audio streams.
+![Conversation AI Client - Text Streaming Demo](../.github/assets/Conversation-Ai-Client.gif)
 
-Text streaming provides users with a visual representation of the conversation, improving accessibility and enhancing the overall user experience. While voice interactions are the most natural way to communicate there are various instances where you might want to suppliment the audio output, to include text:
+So, you've built an amazing conversational AI app using Agora, maybe following our main [Conversational AI Guide](./GUIDE.md). Your users can chat with an AI, just like talking to a person. But what about _seeing_ the conversation? That's where text streaming comes in.
 
-1. **Accessibility**: Text makes the application usable for people with hearing impairments
-2. **Reference**: Users can refer back to what was said without relying on memory
-3. **Noisy environments**: Text becomes crucial when users can't clearly hear audio
-4. **Verification**: Seeing words ensures users that the system understood them correctly
-5. **Multi-modal interactions**: Some information is better consumed visually (e.g., lists, URLs)
+This guide focuses on adding real-time text transcriptions to your audio-based AI conversations. Think of it as subtitles for your AI chat.
 
-## Architecture Overview
+Why bother adding text when the primary interaction is voice? Good question! Here's why it's a game-changer:
 
-The text streaming implementation consists of three main components:
+1.  **Accessibility is Key**: Text opens up your app to users with hearing impairments. Inclusivity matters!
+2.  **Memory Aid**: Let's be honest, we all forget things. A text transcript lets users quickly scan back through the conversation.
+3.  **Loud Places, No Problem**: Ever tried having a voice call in a noisy cafe? Text transcriptions ensure the message gets through, even if the audio is hard to hear.
+4.  **Did it Hear Me Right?**: Seeing the transcription confirms the AI understood the user correctly (or reveals when it didn't!).
+5.  **Beyond Voice**: Sometimes, information like lists, code snippets, or website URLs are just easier to digest visually. Text streaming enables true multi-modal interaction.
 
-1. **Message Engine** (`lib/message.ts`): Core component that processes, manages, and maintains the state of text messages. This file is provided by Agora.
-2. **Text Chat Component** (`components/Text-Chat.tsx`): UI component that renders messages and handles user interactions (this is our custom component for this example, you will create your own based on your use-case.)
-3. **Conversation Component** (`components/ConversationComponent.tsx`): Orchestrates RTC connections, microphone controls, and integrates Text Chat. (This is the existing component that handles the audio and streaming)
+Ready to add this superpower to your app? Let's dive in.
 
-How these components interact:
+## The Blueprint: How Text Streaming Fits In
 
-```
-┌─────────────────────┐      ┌─────────────────────┐
-│                     │      │                     │
-│  Agora RTC Client   │◄────►│   MessageEngine     │
-│                     │      │                     │
-└─────────────────────┘      └─────────────────┬───┘
-          ▲                                    │
-          │                                    │ Updates
-          │                                    ▼
-┌─────────┴───────────┐      ┌─────────────────────┐
-│                     │      │                     │
-│ConversationComponent│──────►     Text Chat       │
-│                     │      │                     │
-└─────────────────────┘      └─────────────────────┘
+Adding text streaming involves three main players in your codebase:
+
+1.  **The Brains (`lib/message.ts`)**: This is the `MessageEngine`, provided by Agora. It's the core logic unit that receives raw transcription data, figures out what's what, keeps track of message states (like "is the AI still talking?"), and manages the flow.
+2.  **The Face (`components/ConvoTextStream.tsx`)**: This is your UI component. It takes the processed messages from the `MessageEngine` and displays them prettily. Think chat bubbles, scrolling, and maybe some cool animations for streaming text. We provide an example, but feel free to customize it to match your app's look and feel.
+3.  **The Conductor (`components/ConversationComponent.tsx`)**: This is likely your existing component that handles the Agora RTC connection, microphone access, and manages the overall conversation flow. It acts as the central hub, connecting the `MessageEngine` to the UI (`ConvoTextStream`).
+
+Here's a simplified view of how they communicate with each other:
+
+```mermaid
+flowchart LR
+    A[User/AI via Agora RTC] -- Raw Data --> B(MessageEngine)
+    B -- Processed Messages --> C(ConversationComponent State)
+    C -- Data Props --> D(ConvoTextStream UI)
+    A --> C
 ```
 
-## Message Flow
+Essentially, the raw data comes from Agora, the `MessageEngine` makes sense of it, updates the main `ConversationComponent`'s state, which then passes the necessary info down to the `ConvoTextStream` to show the user.
 
-Understanding how messages flow through the system is crucial for implementation:
+## Following the Data: The Message Lifecycle
 
+Understanding how a single transcription message travels from the network to the screen is key:
+
+```mermaid
+graph LR
+    A[Raw Data Chunks Arrive] --> B(MessageEngine Decodes & Processes);
+    B --> C(Processed Message Queued);
+    C --> D(State Update Triggered);
+    D --> E(UI Renders the Update);
+
+    subgraph RTC_Client [Agora RTC Client]
+        A
+    end
+    subgraph MsgEngine [MessageEngine]
+        B
+        C
+    end
+    subgraph ConvoComp [ConversationComponent]
+        D
+    end
+    subgraph ConvoStream [ConvoTextStream]
+        E
+    end
 ```
-RTC Stream → Message Processing → Message Queue → State Updates → UI Rendering
-```
 
-1. **RTC Stream**: Raw data chunks arrive via the Agora RTC client
-2. **Message Processing**: The MessageEngine decodes and processes these chunks
-3. **Message Queue**: Processed messages enter a queue for orderly handling
-4. **State Updates**: The ConversationComponent receives updated message lists
-5. **UI Rendering**: The TextChat component displays the messages with appropriate styling
+1.  **RTC Stream**: Tiny packets of data containing transcription info arrive via the Agora RTC client. This could be a snippet of what the user said or what the AI is saying.
+2.  **Message Processing**: The `MessageEngine` grabs these raw chunks, figures out if they belong to the user or the AI, and whether the message is finished or still incoming.
+3.  **Message Queue**: To keep things orderly, processed messages (or message updates) are briefly queued.
+4.  **State Updates**: The `MessageEngine` notifies the `ConversationComponent` (via a callback you provide) that the list of messages has changed. The `ConversationComponent` updates its React state.
+5.  **UI Rendering**: React detects the state change and re-renders the `ConvoTextStream` component with the new message list, displaying the latest text to the user.
 
-This flow ensures that streaming text is processed efficiently and displayed to the user in real-time, with proper handling of in-progress, completed, and interrupted messages.
+This efficient pipeline ensures that text appears smoothly and in real-time, correctly handling messages that are still being typed out ("in-progress"), fully delivered ("completed"), or cut off ("interrupted").
 
-## Message Types and Processing
+## Decoding the Data: Message Types
 
-The MessageEngine handles several types of messages, each requiring specific processing:
+The `MessageEngine` needs to understand different kinds of transcription messages flowing through the RTC data channel. Here are the main ones:
 
-### User Transcriptions
+### User Transcriptions (What the User Said)
 
 ```typescript
+// Represents a transcription of the user's speech
 export interface IUserTranscription extends ITranscriptionBase {
-  object: ETranscriptionObjectType.USER_TRANSCRIPTION; // "user.transcription"
-  final: boolean;
+  object: ETranscriptionObjectType.USER_TRANSCRIPTION; // Identifies as "user.transcription"
+  final: boolean; // Is this the final, complete transcription? (true/false)
 }
 ```
 
-### Agent (AI) Transcriptions
+This tells us what the speech-to-text system thinks the user said. The `final` flag is important – intermediate results might change slightly.
+
+### Agent Transcriptions (What the AI is Saying)
 
 ```typescript
+// Represents a transcription of the AI agent's speech
 export interface IAgentTranscription extends ITranscriptionBase {
-  object: ETranscriptionObjectType.AGENT_TRANSCRIPTION; // "assistant.transcription"
-  quiet: boolean;
-  turn_seq_id: number;
-  turn_status: EMessageStatus;
+  object: ETranscriptionObjectType.AGENT_TRANSCRIPTION; // Identifies as "assistant.transcription"
+  quiet: boolean; // Was this generated during a quiet period? (Useful for debugging)
+  turn_seq_id: number; // Unique ID for this conversational turn
+  turn_status: EMessageStatus; // Is this message IN_PROGRESS, END, or INTERRUPTED?
 }
 ```
+
+This is the text the AI is generating, often sent word-by-word or phrase-by-phrase to the text-to-speech engine _and_ to our `MessageEngine` for display. The `turn_status` is crucial for knowing when the AI starts and finishes speaking.
 
 ### Message Interruptions
 
 ```typescript
+// Signals that a previous message was interrupted
 export interface IMessageInterrupt {
-  object: ETranscriptionObjectType.MSG_INTERRUPTED; // "message.interrupt"
-  message_id: string;
+  object: ETranscriptionObjectType.MSG_INTERRUPTED; // Identifies as "message.interrupt"
+  message_id: string; // Which message got interrupted?
   data_type: 'message';
-  turn_id: number;
-  start_ms: number;
-  send_ts: number;
+  turn_id: number; // The turn ID of the interrupted message
+  start_ms: number; // Timestamp info
+  send_ts: number; // Timestamp info
 }
 ```
 
-Each message type goes through specific processing paths in the MessageEngine:
+This happens if, for example, the user starts talking while the AI is still speaking. The `MessageEngine` uses this to mark the AI's interrupted message accordingly in the UI.
 
-- **User Transcriptions**: Usually processed as complete messages without streaming
-- **Agent Transcriptions**: Often processed word-by-word for streaming display
-- **Message Interruptions**: Trigger status changes in existing messages
+The `MessageEngine` intelligently handles these different types:
 
-The MessageEngine maintains an internal queue and state to handle these different message types seamlessly.
+- User messages often arrive as complete thoughts.
+- Agent messages frequently stream in piece by piece.
+- Interruptions update the status of messages already being processed.
 
-## The Message Engine
+It juggles all this using an internal queue and state management so your UI component doesn't have to worry about the raw complexity.
 
-The Message Engine is the core of text streaming functionality. It handles:
+## Meet the `MessageEngine`: The Heart of Text Streaming
 
-1. Processing incoming RTC messages containing transcriptions
-2. Managing message state (in-progress, complete, interrupted)
-3. Ordering and buffering messages
-4. Notifying subscribers when message state changes
+The `MessageEngine` (`lib/message.ts`) is where the magic happens. You don't need to build it; Agora provides it. Its main jobs are:
 
-### Key Concepts in MessageEngine
+1.  **Listening**: It hooks into the Agora RTC client to receive those raw transcription data messages.
+2.  **Processing**: It decodes the messages, identifies who sent them (user or AI), and figures out their status.
+3.  **Managing State**: It keeps track of whether each message is still streaming (`IN_PROGRESS`), finished (`END`), or was cut off (`INTERRUPTED`).
+4.  **Ordering & Buffering**: It ensures messages are handled in the correct sequence, even if network packets arrive slightly out of order.
+5.  **Notifying**: It tells your `ConversationComponent` (via a callback) whenever the list of displayable messages changes.
 
-#### Message Status
+### Key Concepts Inside the Engine
 
-Messages in the system can have three states:
+#### Message Status: Is it Done Yet?
+
+Every message tracked by the engine has a status:
 
 ```typescript
 export enum EMessageStatus {
-  IN_PROGRESS = 0, // Message is still being processed/streamed
-  END = 1, // Message has completed normally
-  INTERRUPTED = 2, // Message was interrupted before completion
+  IN_PROGRESS = 0, // Still being received/streamed (e.g., AI is talking)
+  END = 1, // Finished normally.
+  INTERRUPTED = 2, // Cut off before completion.
 }
 ```
 
-#### Message Engine Modes
+This helps your UI know how to display each message (e.g., add a "..." or a pulsing animation for `IN_PROGRESS` messages).
 
-The engine supports different rendering modes for flexibility:
+#### Engine Modes: How Granular Do You Want To Be?
+
+The engine can process incoming agent text in different ways:
 
 ```typescript
 export enum EMessageEngineMode {
-  TEXT = 'text', // Processes messages as complete text blocks
-  WORD = 'word', // Processes messages word by word, enabling granular control
-  AUTO = 'auto', // Automatically determines the most suitable mode
+  TEXT = 'text', // Treats each agent message chunk as a complete block. Simpler, less "streaming" feel.
+  WORD = 'word', // Processes agent messages word-by-word if timing info is available. Gives that nice streaming effect.
+  AUTO = 'auto', // The engine decides! If word timings are present, it uses WORD mode; otherwise, TEXT mode. (Recommended)
 }
 ```
 
-#### Message Interface
+Using `AUTO` mode is generally the easiest way to start. The engine adapts based on the data it receives from the backend conversational AI service. If the service sends detailed word timings, you get smooth streaming; if not, it falls back gracefully to showing text blocks.
 
-Messages are represented with a simple interface:
+#### The Output: What Your UI Gets
+
+The `MessageEngine` ultimately provides your application (via its callback) with a list of message objects ready for display:
 
 ```typescript
 export interface IMessageListItem {
-  uid: number; // Unique identifier for the message sender (0 for AI agent)
-  turn_id: number; // ID representing the turn/sequence in conversation
-  text: string; // The actual message content/transcript
-  status: EMessageStatus; // Current status of the message
+  uid: number | string; // Who sent this? User's numeric UID or Agent's string/numeric UID (often 0 or a specific string like "Agent").
+  turn_id: number; // Helps keep track of conversational turns.
+  text: string; // The actual words to display.
+  status: EMessageStatus; // The current status (IN_PROGRESS, END, INTERRUPTED).
 }
 ```
 
-### Initializing the Message Engine
+Your UI component just needs to render a list of these objects.
 
-Initialize the Message Engine inside the `ConversationComponent` after the Agora RTC client is ready:
+### Wiring Up the Engine
+
+You'll typically initialize the `MessageEngine` within your main `ConversationComponent`, probably inside a `useEffect` hook that runs once the Agora RTC `client` is ready.
 
 ```typescript
-// Inside ConversationComponent
+// Inside ConversationComponent.tsx
+
+const client = useRTCClient(); // Get the Agora client instance
+const [messageList, setMessageList] = useState<IMessageListItem[]>([]);
+const [currentInProgressMessage, setCurrentInProgressMessage] =
+  useState<IMessageListItem | null>(null);
+const messageEngineRef = useRef<MessageEngine | null>(null);
+const agentUID = process.env.NEXT_PUBLIC_AGENT_UID || 'Agent'; // Get your agent's expected UID
+
 useEffect(() => {
+  // Only initialize once the client exists and we haven't already started the engine
   if (client && !messageEngineRef.current) {
-    // Create message engine with AUTO mode for adaptive rendering
-    const messageEngine = new MessageEngine(
+    console.log('Initializing MessageEngine...');
+
+    // Create the engine instance
+    const engine = new MessageEngine(
       client,
-      EMessageEngineMode.AUTO,
-      // Callback to handle message list updates
+      EMessageEngineMode.AUTO, // Use AUTO mode for adaptive streaming
+      // This callback function is the critical link!
+      // It receives the updated message list whenever something changes.
       (updatedMessages: IMessageListItem[]) => {
-        // Sort messages by turn_id to maintain order
+        // 1. Always sort messages by turn_id to ensure chronological order
         const sortedMessages = [...updatedMessages].sort(
           (a, b) => a.turn_id - b.turn_id
         );
 
-        // Find the latest in-progress message
-        const inProgressMsg = sortedMessages.find(
+        // 2. Find the *latest* message that's still streaming (if any)
+        // We handle this separately for smoother UI updates during streaming.
+        const inProgressMsg = sortedMessages.findLast(
           (msg) => msg.status === EMessageStatus.IN_PROGRESS
         );
 
-        // Update states
+        // 3. Update component state:
+        //    - messageList gets all *completed* or *interrupted* messages.
+        //    - currentInProgressMessage gets the single *latest* streaming message.
         setMessageList(
           sortedMessages.filter(
             (msg) => msg.status !== EMessageStatus.IN_PROGRESS
@@ -179,437 +228,640 @@ useEffect(() => {
       }
     );
 
-    messageEngineRef.current = messageEngine;
+    // Store the engine instance in a ref
+    messageEngineRef.current = engine;
+
+    // Start the engine's processing loop
+    // legacyMode: false is recommended for newer setups
     messageEngineRef.current.run({ legacyMode: false });
+    console.log('MessageEngine started.');
   }
 
-  // Cleanup on unmount
+  // Cleanup function: Stop the engine when the component unmounts
   return () => {
     if (messageEngineRef.current) {
+      console.log('Cleaning up MessageEngine...');
       messageEngineRef.current.cleanup();
       messageEngineRef.current = null;
     }
   };
-}, [client]);
+}, [client]); // Dependency array ensures this runs when the client is ready
 ```
 
-## UI Component
+Let's break down that crucial callback function:
 
-The `TextChat` component is a simple UI for displaying conversation text. It handles both completed messages and text streaming in, creating a responsive chat experience.
+1.  **Sort**: Messages might arrive slightly out of sync; sorting by `turn_id` fixes that.
+2.  **Separate**: We treat the _very last_ `IN_PROGRESS` message differently from the others. This allows the UI to potentially render it with a special streaming effect without re-rendering the entire list constantly.
+3.  **Update State**: Setting the `messageList` (completed/interrupted messages) and `currentInProgressMessage` triggers a React re-render, passing the fresh data to your `ConvoTextStream` component.
 
-### Component Features
+## Building the UI: The `ConvoTextStream` Component
 
-The TextChat component implements several key features essential for a good chat experience:
+Now, let's look at the example `ConvoTextStream` component (`components/ConvoTextStream.tsx`). Its job is to take the message data from the `ConversationComponent` and make it look like a chat interface.
 
-1. **Rendering of messages**: Displays both completed messages and actively streaming messages
-2. **Distinctive styling**: Visually differentiates between user and AI messages
-3. **Collapsible interface**: Can be expanded or collapsed based on user preference
-4. **Smart auto-scrolling**: Automatically scrolls to show new content while respecting user actions
-5. **Streaming indicators**: Visual cues showing when messages are being generated
-6. **Expandable view**: Can toggle between compact and expanded modes
+### Inputs (Props)
 
-### Component Props
-
-The component accepts three key properties:
+It needs data from its parent (`ConversationComponent`):
 
 ```typescript
-interface TextChatProps {
-  messageList: IMessageListItem[]; // Array of completed messages
-  currentInProgressMessage?: IMessageListItem | null; // Currently streaming message
-  agentUID: string | undefined; // UID of the AI agent for message styling
+interface ConvoTextStreamProps {
+  // All the messages that are done (completed or interrupted)
+  messageList: IMessageListItem[];
+  // The single message currently being streamed by the AI (if any)
+  currentInProgressMessage?: IMessageListItem | null;
+  // The UID of the AI agent (so we can style its messages differently)
+  agentUID: string | number | undefined;
 }
 ```
 
-### Key Functionality
+These props are directly populated from the state variables (`messageList`, `currentInProgressMessage`) that our `MessageEngine` callback updates in the `ConversationComponent`.
 
-Let's examine the key methods that power the TextChat component:
+### Core UX Features
 
-#### Manual and Automatic Scrolling
+A good chat UI needs more than just displaying text. Our example focuses on:
 
-The component intelligently handles scrolling to ensure new messages are visible:
+#### Smart Scrolling
+
+Users hate losing their place when new messages arrive, _unless_ they're already at the bottom wanting to see the latest.
 
 ```typescript
-// Scroll to bottom function for direct calls
+// Ref for the scrollable chat area
+const scrollRef = useRef<HTMLDivElement>(null);
+// State to track if we should automatically scroll down
+const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
+
+// Function to force scroll to the bottom
 const scrollToBottom = () => {
-  if (scrollRef.current) {
-    scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  scrollRef.current?.scrollTo({
+    top: scrollRef.current.scrollHeight,
+    behavior: 'smooth', // Optional: make it smooth
+  });
+};
+
+// Detects when the user scrolls manually
+const handleScroll = () => {
+  if (!scrollRef.current) return;
+  const { scrollHeight, scrollTop, clientHeight } = scrollRef.current;
+  // Is the user within ~100px of the bottom?
+  const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
+  // Only auto-scroll if the user is near the bottom
+  if (isNearBottom !== shouldAutoScroll) {
+    setShouldAutoScroll(isNearBottom);
   }
 };
 
-// Detect when user scrolls to determine auto-scroll behavior
-const handleScroll = () => {
-  if (scrollRef.current) {
-    const { scrollHeight, scrollTop, clientHeight } = scrollRef.current;
-    const isAtBottom = scrollHeight - scrollTop - clientHeight < 100;
-    setShouldAutoScroll(isAtBottom);
+// Effect to actually perform the auto-scroll when needed
+useEffect(() => {
+  // Check if a new message arrived OR if we should be auto-scrolling
+  const hasNewMessage = messageList.length > prevMessageLengthRef.current; // Track previous length
+
+  if ((hasNewMessage || shouldAutoScroll) && scrollRef.current) {
+    scrollToBottom();
   }
-};
+
+  // Update previous length ref for next render
+  prevMessageLengthRef.current = messageList.length;
+}, [messageList, currentInProgressMessage?.text, shouldAutoScroll]); // Re-run when messages change or scroll state changes
+
+// Add the onScroll handler to the scrollable div
+// <div ref={scrollRef} onScroll={handleScroll} className="overflow-auto...">
 ```
 
-The `scrollToBottom` function directly controls scrolling, while `handleScroll` detects user scroll behavior to determine if auto-scrolling should be enabled (when the user is already near the bottom) or disabled (when the user has scrolled up to read earlier messages).
+This logic ensures:
 
-#### Detecting Significant Content Changes
+- If the user scrolls up to read history, the view stays put.
+- If the user is at the bottom, new messages automatically scroll into view.
 
-To avoid too-frequent scrolling during streaming, the component checks for meaningful changes in the streamed content:
+#### Throttled Scrolling During Streaming (Optional Enhancement)
+
+The previous `useEffect` for scrolling might trigger on _every single word_ update if using `WORD` mode. This can feel jittery. We can improve this by only scrolling significantly when _enough_ new text has arrived.
 
 ```typescript
-// Check if streaming content has significantly changed
-const hasContentChanged = () => {
+// --- Add these refs ---
+const prevMessageTextRef = useRef(''); // Track the text of the last in-progress message
+const significantChangeScrollTimer = useRef<NodeJS.Timeout | null>(null); // Timer ref
+
+// --- New function to check for significant change ---
+const hasContentChangedSignificantly = (threshold = 20): boolean => {
   if (!currentInProgressMessage) return false;
 
   const currentText = currentInProgressMessage.text || '';
   const textLengthDiff = currentText.length - prevMessageTextRef.current.length;
 
-  // Consider significant change if more than 20 new characters
-  const hasSignificantChange = textLengthDiff > 20;
+  // Only trigger if a decent chunk of text arrived
+  const hasSignificantChange = textLengthDiff >= threshold;
 
-  // Update reference
-  if (hasSignificantChange) {
+  // Update the ref *only if* it changed significantly
+  if (
+    hasSignificantChange ||
+    currentInProgressMessage.status !== EMessageStatus.IN_PROGRESS
+  ) {
     prevMessageTextRef.current = currentText;
   }
 
   return hasSignificantChange;
 };
-```
 
-This prevents continuous scrolling with every small update, creating a smoother experience as the AI's message streams in.
-
-#### Showing Streaming Messages
-
-The component determines whether to show a streaming message:
-
-```typescript
-const shouldShowStreamingMessage = () => {
-  return (
-    currentInProgressMessage !== null &&
-    currentInProgressMessage.status === EMessageStatus.IN_PROGRESS &&
-    currentInProgressMessage.text.trim().length > 0
-  );
-};
-```
-
-This ensures we only display streaming messages that are actually in progress and have content.
-
-#### Toggle Controls
-
-The component has two toggle controls for the chat interface:
-
-```typescript
-// Toggle chat open/closed
-const toggleChat = () => {
-  setIsOpen(!isOpen);
-  // If opening the chat, consider it as having seen the first message
-  if (!isOpen) {
-    hasSeenFirstMessageRef.current = true;
-  }
-};
-
-// Toggle between normal and expanded mode
-const toggleChatExpanded = () => {
-  setIsChatExpanded(!isChatExpanded);
-};
-```
-
-### Auto-Opening the Chat
-
-The chat automatically opens when the first message appears:
-
-```typescript
-// Effect for auto-opening chat when first streaming message arrives
+// --- Modify the scrolling useEffect ---
 useEffect(() => {
-  // Check if this is the first message and chat should be opened
-  const hasNewMessage = messageList.length > 0;
-  const hasInProgressMessage =
-    shouldShowStreamingMessage() && currentInProgressMessage !== null;
+  const hasNewCompleteMessage =
+    messageList.length > prevMessageLengthRef.current;
+  const streamingContentChanged = hasContentChangedSignificantly(); // Use the new check
+
+  // Clear any pending scroll timer if conditions change
+  if (significantChangeScrollTimer.current) {
+    clearTimeout(significantChangeScrollTimer.current);
+    significantChangeScrollTimer.current = null;
+  }
 
   if (
-    (hasNewMessage || hasInProgressMessage) &&
-    !hasSeenFirstMessageRef.current &&
-    !isOpen
-  ) {
-    setIsOpen(true);
-    hasSeenFirstMessageRef.current = true;
-  }
-}, [messageList, currentInProgressMessage]);
-```
-
-### Smart Auto-Scrolling
-
-The component implements auto-scrolling behavior:
-
-```typescript
-useEffect(() => {
-  // Auto-scroll in these cases:
-  // 1. New complete message arrived
-  // 2. User is already at bottom
-  // 3. Streaming content has changed significantly
-  const hasNewMessage = messageList.length > prevMessageLengthRef.current;
-  const hasStreamingChange = hasContentChanged();
-
-  if (
-    (hasNewMessage || shouldAutoScroll || hasStreamingChange) &&
+    (hasNewCompleteMessage || (streamingContentChanged && shouldAutoScroll)) &&
     scrollRef.current
   ) {
-    // Use direct scroll to bottom for more reliable scrolling
-    scrollToBottom();
+    // Introduce a small delay to batch scrolls during rapid streaming
+    significantChangeScrollTimer.current = setTimeout(() => {
+      scrollToBottom();
+      significantChangeScrollTimer.current = null;
+    }, 50); // 50ms delay, adjust as needed
   }
 
   prevMessageLengthRef.current = messageList.length;
-}, [messageList, currentInProgressMessage?.text, shouldAutoScroll]);
 
-// Extra safety: ensure scroll happens after content renders during active streaming
-useEffect(() => {
-  if (
-    currentInProgressMessage?.status === EMessageStatus.IN_PROGRESS &&
-    shouldAutoScroll
-  ) {
-    const timer = setTimeout(scrollToBottom, 100);
-    return () => clearTimeout(timer);
-  }
-}, [currentInProgressMessage?.text]);
+  // Cleanup timer on unmount
+  return () => {
+    if (significantChangeScrollTimer.current) {
+      clearTimeout(significantChangeScrollTimer.current);
+    }
+  };
+}, [messageList, currentInProgressMessage?.text, shouldAutoScroll]);
 ```
 
-This approach achieves a few distict UX goals:
+This refined approach checks if more than, say, 20 characters have been added to the streaming message before triggering a scroll, making the experience smoother. It also uses a small `setTimeout` to batch scrolls that happen in quick succession.
 
-- New messages are always visible
-- The view follows streaming text as it's generated
-- User scroll position is respected when reading previous messages
-- Scroll behavior stays smooth during active streaming
+#### Displaying the Streaming Message
 
-### Full Component Implementation
-
-Here's the complete TextChat component implementation:
+We need to decide when and how to show the `currentInProgressMessage`:
 
 ```typescript
+// Helper to decide if the streaming message should be shown
+const shouldShowStreamingMessage = (): boolean => {
+  return (
+    // Is there an in-progress message?
+    currentInProgressMessage !== null &&
+    // Is it *actually* in progress?
+    currentInProgressMessage.status === EMessageStatus.IN_PROGRESS &&
+    // Does it have any text content yet?
+    currentInProgressMessage.text.trim().length > 0
+  );
+};
+
+// In the JSX, combine the lists for rendering:
+const allMessagesToRender = [...messageList];
+if (shouldShowStreamingMessage() && currentInProgressMessage) {
+  // Add the streaming message to the end of the list to be rendered
+  allMessagesToRender.push(currentInProgressMessage);
+}
+
+// Then map over `allMessagesToRender`
+// {allMessagesToRender.map((message, index) => ( ... render message bubble ... ))}
+```
+
+This ensures we only render the streaming message bubble when it's actively receiving non-empty text.
+
+#### Chat Controls (Toggle Open/Close, Expand)
+
+Basic UI controls enhance usability:
+
+```typescript
+const [isOpen, setIsOpen] = useState(false); // Is the chat window visible?
+const [isChatExpanded, setIsChatExpanded] = useState(false); // Is it in expanded mode?
+const hasSeenFirstMessageRef = useRef(false); // Track if the user has interacted or seen the first message
+
+// Toggle chat open/closed
+const toggleChat = () => {
+  const newState = !isOpen;
+  setIsOpen(newState);
+  // If opening, mark that the user has now 'seen' the chat
+  if (newState) {
+    hasSeenFirstMessageRef.current = true;
+  }
+};
+
+// Toggle between normal and expanded height
+const toggleChatExpanded = () => {
+  setIsChatExpanded(!isChatExpanded);
+};
+
+// --- Auto-Open Logic ---
+useEffect(() => {
+  const hasAnyMessage = messageList.length > 0 || shouldShowStreamingMessage();
+
+  // If there's a message, we haven't opened it yet automatically, and it's currently closed...
+  if (hasAnyMessage && !hasSeenFirstMessageRef.current && !isOpen) {
+    setIsOpen(true); // Open it!
+    hasSeenFirstMessageRef.current = true; // Mark as seen/auto-opened
+  }
+}, [messageList, currentInProgressMessage, isOpen]); // Rerun when messages or open state change
+```
+
+This includes logic to automatically pop open the chat window the first time a message appears, but only if the user hasn't manually closed it or interacted with it before.
+
+### Rendering the Messages
+
+The core rendering logic maps over the combined message list (`allMessagesToRender`) and creates styled divs for each message:
+
+```typescript
+// Inside the map function:
+<div
+  key={`${message.turn_id}-${message.uid}-${index}`} // More robust key
+  ref={index === allMessagesToRender.length - 1 ? lastMessageRef : null} // Ref for potential scrolling logic
+  className={cn(
+    'flex items-start gap-2 w-full mb-2', // Basic layout styles
+    // Is this message from the AI? Align left. Otherwise, align right.
+    message.uid === 0 || message.uid.toString() === agentUID
+      ? 'justify-start'
+      : 'justify-end'
+  )}
+>
+  {/* Conditionally render Avatar based on sender if needed */}
+  {/* {isAgent && <Avatar ... />} */}
+
+  {/* Message Bubble */}
+  <div
+    className={cn(
+      'max-w-[80%] rounded-xl px-3 py-2 text-sm md:text-base shadow-sm', // Slightly softer corners, shadow
+      isAgent ? 'bg-gray-100 text-gray-800' : 'bg-blue-500 text-white',
+      // Optional: Dim user message slightly if interrupted while IN_PROGRESS
+      message.status === EMessageStatus.IN_PROGRESS && !isAgent && 'opacity-80'
+    )}
+  >
+    {message.text}
+  </div>
+</div>
+```
+
+This uses `tailwindcss` and the `cn` utility for conditional classes to:
+
+- Align user messages to the right, AI messages to the left.
+- Apply different background colors.
+
+## Putting It All Together: Integration in `ConversationComponent`
+
+Integrating the `ConvoTextStream` into your main `ConversationComponent` is straightforward once the `MessageEngine` is initialized and managing state.
+
+1.  **Initialize MessageEngine**: As shown in the "Wiring Up the Engine" section, set up the `MessageEngine` in a `useEffect` hook, providing the callback to update `messageList` and `currentInProgressMessage` state variables.
+2.  **Render `ConvoTextStream`**: In the `ConversationComponent`'s return JSX, include the `ConvoTextStream` and pass the necessary props:
+
+```typescript
+// Inside ConversationComponent's return statement
+
+// ... other UI elements like connection status, microphone button ...
+
+return (
+  <div className="relative flex flex-col h-full">
+    {/* ... Other UI ... */}
+
+    {/* Pass the state managed by MessageEngine's callback */}
+    <ConvoTextStream
+      messageList={messageList}
+      currentInProgressMessage={currentInProgressMessage}
+      agentUID={agentUID} // Pass the agent's UID
+    />
+
+    {/* ... Microphone Button etc ... */}
+  </div>
+);
+```
+
+And that's the core integration! The `MessageEngine` handles the data flow from RTC, updates the state in `ConversationComponent`, which then passes the formatted data down to `ConvoTextStream` for display.
+
+## Making It Your Own: Styling and Customization
+
+The provided `ConvoTextStream` is a starting point. You'll likely want to customize its appearance.
+
+### Styling Message Bubbles
+
+Modify the `tailwindcss` classes within `ConvoTextStream.tsx` to match your app's design system. Change colors, fonts, padding, border-radius, etc.
+
+```typescript
+// Example: Change AI bubble color
+    message.uid === 0 || message.uid.toString() === agentUID
+  ? 'bg-purple-100 text-purple-900' // Changed from gray
+  : 'bg-blue-500 text-white',
+```
+
+### Chat Window Appearance
+
+Adjust the positioning (`fixed`, `absolute`), size (`w-96`), background (`bg-white`), shadows (`shadow-lg`), etc., of the main chat container (`#chatbox` div and its children).
+
+### Streaming Indicator
+
+The `animate-pulse` class is a basic indicator. You could replace it with:
+
+- A custom CSS animation.
+- Adding an ellipsis (...) to the end of the `message.text`.
+- Displaying a small typing indicator icon next to the bubble.
+
+```typescript
+// Example: Adding ellipsis instead of pulse
+{
+  message.text;
+}
+{
+  message.status === EMessageStatus.IN_PROGRESS ? '...' : '';
+}
+
+// Remove the animate-pulse class if using ellipsis
+// className={cn( ... , message.status === EMessageStatus.IN_PROGRESS && 'animate-pulse' )}
+```
+
+### Expanding/Collapsing Behavior
+
+Modify the `toggleChatExpanded` function and the associated conditional classes (`isChatExpanded && 'expanded'`) to change how the chat window resizes or behaves when expanded. You might want it to take up more screen space or dock differently.
+
+## Under the Hood: Message Processing Flow
+
+For the curious, here's a slightly more detailed look at how the `MessageEngine` processes a single `stream-message` event from the Agora RTC data channel:
+
+```mermaid
+sequenceDiagram
+    participant RTC as Agora RTC Client
+    participant ME as MessageEngine Instance
+    participant Handler as Internal Message Handler
+    participant Queue as Internal Message Queue
+    participant Callback as Your Update Callback (in ConversationComponent)
+    participant State as ConversationComponent State
+
+    RTC-->>ME: Receives 'stream-message' event (raw data chunk)
+    ME->>Handler: processRawChunk(data)
+    Handler->>Handler: Decode chunk (JSON parse, identify type)
+    alt Chunk is part of existing message
+        Handler->>Queue: Update existing message (append text, change status)
+    else Chunk is a new message
+        Handler->>Queue: Add new message entry
+    end
+    Queue-->>Callback: notifySubscribers(updatedMessageList)
+    Callback->>State: setState({ messageList, currentInProgressMessage })
+```
+
+This shows the internal steps: receiving raw data, decoding it, updating or creating messages in an internal queue/store, and finally triggering your callback function to update the React component state.
+
+## Full Component Code (`ConvoTextStream.tsx`)
+
+```typescript
+/* eslint-disable react-hooks/exhaustive-deps */
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   MessageCircle,
   X,
-  UnfoldVertical,
-  ChevronsDownUp,
-  ArrowDownFromLine,
+  ChevronsUpDown, // Changed icon
+  ArrowDownToLine, // Changed icon
+  Expand, // Added icon for expand
+  Shrink, // Added icon for shrink
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { IMessageListItem, EMessageStatus } from '@/lib/message';
+import { IMessageListItem, EMessageStatus } from '@/lib/message'; // Assuming types are here
 
-interface TextChatProps {
+interface ConvoTextStreamProps {
   messageList: IMessageListItem[];
   currentInProgressMessage?: IMessageListItem | null;
-  agentUID: string | undefined;
+  agentUID: string | number | undefined; // Allow number or string
 }
 
-export default function TextChat({
+export default function ConvoTextStream({
   messageList,
   currentInProgressMessage = null,
   agentUID,
-}: TextChatProps) {
+}: ConvoTextStreamProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const lastMessageRef = useRef<HTMLDivElement>(null);
   const prevMessageLengthRef = useRef(messageList.length);
   const prevMessageTextRef = useRef('');
   const [isChatExpanded, setIsChatExpanded] = useState(false);
   const hasSeenFirstMessageRef = useRef(false);
+  const significantChangeScrollTimer = useRef<NodeJS.Timeout | null>(null);
 
-  // Scroll to bottom function for direct calls
-  const scrollToBottom = () => {
+  // --- Scrolling Logic ---
+
+  const scrollToBottom = useCallback(() => {
     if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      scrollRef.current.scrollTo({
+        top: scrollRef.current.scrollHeight,
+        behavior: 'smooth',
+      });
     }
-  };
+  }, []);
 
-  const handleScroll = () => {
-    if (scrollRef.current) {
-      const { scrollHeight, scrollTop, clientHeight } = scrollRef.current;
-      const isAtBottom = scrollHeight - scrollTop - clientHeight < 100;
-      setShouldAutoScroll(isAtBottom);
+  const handleScroll = useCallback(() => {
+    if (!scrollRef.current) return;
+    const { scrollHeight, scrollTop, clientHeight } = scrollRef.current;
+    const isNearBottom = scrollHeight - scrollTop - clientHeight < 150; // Increased threshold slightly
+    if (isNearBottom !== shouldAutoScroll) {
+      setShouldAutoScroll(isNearBottom);
     }
-  };
+  }, [shouldAutoScroll]);
 
-  // Check if streaming content has significantly changed
-  const hasContentChanged = () => {
-    if (!currentInProgressMessage) return false;
+  const hasContentChangedSignificantly = useCallback(
+    (threshold = 20): boolean => {
+      if (!currentInProgressMessage) return false;
+      const currentText = currentInProgressMessage.text || '';
+      // Only compare if the message is actually in progress
+      const baseText =
+        currentInProgressMessage.status === EMessageStatus.IN_PROGRESS
+          ? prevMessageTextRef.current
+          : currentText;
+      const textLengthDiff = currentText.length - baseText.length;
+      const hasSignificantChange = textLengthDiff >= threshold;
 
-    const currentText = currentInProgressMessage.text || '';
-    const textLengthDiff =
-      currentText.length - prevMessageTextRef.current.length;
-
-    // Consider significant change if more than 20 new characters
-    const hasSignificantChange = textLengthDiff > 20;
-
-    // Update reference
-    if (hasSignificantChange) {
-      prevMessageTextRef.current = currentText;
-    }
-
-    return hasSignificantChange;
-  };
-
-  // Effect for auto-opening chat when first streaming message arrives
-  useEffect(() => {
-    // Check if this is the first message and chat should be opened
-    const hasNewMessage = messageList.length > 0;
-    const hasInProgressMessage =
-      shouldShowStreamingMessage() && currentInProgressMessage !== null;
-
-    if (
-      (hasNewMessage || hasInProgressMessage) &&
-      !hasSeenFirstMessageRef.current &&
-      !isOpen
-    ) {
-      setIsOpen(true);
-      hasSeenFirstMessageRef.current = true;
-    }
-  }, [messageList, currentInProgressMessage]);
+      // Update ref immediately if it's a significant change or message finished/interrupted
+      if (
+        hasSignificantChange ||
+        currentInProgressMessage.status !== EMessageStatus.IN_PROGRESS
+      ) {
+        prevMessageTextRef.current = currentText;
+      }
+      return hasSignificantChange;
+    },
+    [currentInProgressMessage]
+  );
 
   useEffect(() => {
-    // Auto-scroll in these cases:
-    // 1. New complete message arrived
-    // 2. User is already at bottom
-    // 3. Streaming content has changed significantly
-    const hasNewMessage = messageList.length > prevMessageLengthRef.current;
-    const hasStreamingChange = hasContentChanged();
+    const hasNewCompleteMessage =
+      messageList.length > prevMessageLengthRef.current;
+    // Check significance *only* if we should be auto-scrolling
+    const streamingContentChanged =
+      shouldAutoScroll && hasContentChangedSignificantly();
+
+    if (significantChangeScrollTimer.current) {
+      clearTimeout(significantChangeScrollTimer.current);
+      significantChangeScrollTimer.current = null;
+    }
 
     if (
-      (hasNewMessage || shouldAutoScroll || hasStreamingChange) &&
+      (hasNewCompleteMessage || streamingContentChanged) &&
       scrollRef.current
     ) {
-      // Use direct scroll to bottom for more reliable scrolling
-      scrollToBottom();
+      // Debounce scrolling slightly
+      significantChangeScrollTimer.current = setTimeout(() => {
+        scrollToBottom();
+        significantChangeScrollTimer.current = null;
+      }, 50);
     }
 
     prevMessageLengthRef.current = messageList.length;
-  }, [messageList, currentInProgressMessage?.text, shouldAutoScroll]);
 
-  // Extra safety: ensure scroll happens after content renders during active streaming
-  useEffect(() => {
-    if (
-      currentInProgressMessage?.status === EMessageStatus.IN_PROGRESS &&
-      shouldAutoScroll
-    ) {
-      const timer = setTimeout(scrollToBottom, 100);
-      return () => clearTimeout(timer);
-    }
-  }, [currentInProgressMessage?.text]);
+    return () => {
+      if (significantChangeScrollTimer.current) {
+        clearTimeout(significantChangeScrollTimer.current);
+      }
+    };
+  }, [
+    messageList,
+    currentInProgressMessage?.text,
+    shouldAutoScroll,
+    scrollToBottom,
+    hasContentChangedSignificantly,
+  ]);
 
-  const shouldShowStreamingMessage = () => {
+  // --- Component Logic ---
+
+  const shouldShowStreamingMessage = useCallback((): boolean => {
     return (
       currentInProgressMessage !== null &&
       currentInProgressMessage.status === EMessageStatus.IN_PROGRESS &&
       currentInProgressMessage.text.trim().length > 0
     );
-  };
+  }, [currentInProgressMessage]);
 
-  // Toggle chat open/closed
-  const toggleChat = () => {
-    setIsOpen(!isOpen);
-    // If opening the chat, consider it as having seen the first message
-    if (!isOpen) {
+  const toggleChat = useCallback(() => {
+    const newState = !isOpen;
+    setIsOpen(newState);
+    if (newState) {
+      hasSeenFirstMessageRef.current = true; // Mark as seen if manually opened
+    }
+  }, [isOpen]);
+
+  const toggleChatExpanded = useCallback(() => {
+    setIsChatExpanded(!isChatExpanded);
+    // Attempt to scroll to bottom after expanding/shrinking
+    setTimeout(scrollToBottom, 50);
+  }, [isChatExpanded, scrollToBottom]);
+
+  // Auto-open logic
+  useEffect(() => {
+    const hasAnyMessage =
+      messageList.length > 0 || shouldShowStreamingMessage();
+    if (hasAnyMessage && !hasSeenFirstMessageRef.current && !isOpen) {
+      setIsOpen(true);
       hasSeenFirstMessageRef.current = true;
     }
-  };
+  }, [
+    messageList,
+    currentInProgressMessage,
+    isOpen,
+    shouldShowStreamingMessage,
+  ]);
 
-  const toggleChatExpanded = () => {
-    setIsChatExpanded(!isChatExpanded);
-  };
-
-  // Combine complete messages with in-progress message for rendering
-  const allMessages = [...messageList];
+  // Combine messages for rendering
+  const allMessagesToRender = [...messageList];
   if (shouldShowStreamingMessage() && currentInProgressMessage) {
-    allMessages.push(currentInProgressMessage);
+    allMessagesToRender.push(currentInProgressMessage);
   }
 
+  // --- JSX ---
   return (
-    <div id="chatbox" className="fixed bottom-24 right-8 z-50">
+    // Use a more descriptive ID if needed, ensure z-index is appropriate
+    <div
+      id="agora-text-stream-chatbox"
+      className="fixed bottom-24 right-4 md:right-8 z-50"
+    >
       {isOpen ? (
         <div
           className={cn(
-            'bg-white rounded-lg shadow-lg w-96 flex flex-col text-black chatbox',
-            isChatExpanded && 'expanded'
+            'bg-white rounded-lg shadow-xl w-80 md:w-96 flex flex-col text-black transition-all duration-300 ease-in-out', // Adjusted width and added transition
+            // Dynamic height based on expanded state
+            isChatExpanded ? 'h-[60vh] max-h-[500px]' : 'h-80'
           )}
         >
-          <div className="p-2 border-b flex justify-between items-center shrink-0">
-            <Button variant="ghost" size="icon" onClick={toggleChatExpanded}>
+          {/* Header */}
+          <div className="p-2 border-b flex justify-between items-center shrink-0 bg-gray-50 rounded-t-lg">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleChatExpanded}
+              aria-label={isChatExpanded ? 'Shrink chat' : 'Expand chat'}
+            >
               {isChatExpanded ? (
-                <ArrowDownFromLine className="h-4 w-4" />
+                <Shrink className="h-4 w-4" />
               ) : (
-                <UnfoldVertical className="h-4 w-4" />
+                <Expand className="h-4 w-4" />
               )}
             </Button>
-            <h3 className="font-semibold">Chat</h3>
-            <Button variant="ghost" size="icon" onClick={toggleChat}>
+            <h3 className="font-semibold text-sm md:text-base">Conversation</h3>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleChat}
+              aria-label="Close chat"
+            >
               <X className="h-4 w-4" />
             </Button>
           </div>
 
+          {/* Message Area */}
           <div
-            className="flex-1 overflow-auto"
+            className="flex-1 overflow-y-auto scroll-smooth" // Use overflow-y-auto
             ref={scrollRef}
             onScroll={handleScroll}
           >
-            <div className="p-4 space-y-4">
-              {allMessages.map((message, index) => (
-                <div
-                  key={`${message.turn_id}-${message.uid}-${message.status}`}
-                  ref={index === allMessages.length - 1 ? lastMessageRef : null}
-                  className={cn(
-                    'flex items-start gap-2 w-full',
-                    message.uid === 0 || message.uid.toString() === agentUID
-                      ? 'flex-row'
-                      : 'flex-row-reverse'
-                  )}
-                >
-                  {/* Avatar */}
+            <div className="p-3 md:p-4 space-y-3">
+              {allMessagesToRender.map((message, index) => {
+                const isAgent =
+                  message.uid === 0 ||
+                  message.uid?.toString() === agentUID?.toString();
+                return (
                   <div
+                    key={`${message.turn_id}-${message.uid}-${index}`} // Use index as last resort for key part
                     className={cn(
-                      'flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium',
-                      message.uid === 0 || message.uid.toString() === agentUID
-                        ? 'bg-purple-100 text-purple-700'
-                        : 'bg-blue-100 text-blue-700'
+                      'flex items-start gap-2 w-full',
+                      isAgent ? 'justify-start' : 'justify-end'
                     )}
                   >
-                    {message.uid === 0 || message.uid.toString() === agentUID
-                      ? 'AI'
-                      : 'U'}
-                  </div>
+                    {/* Optional: Render avatar only for AI or based on settings */}
+                    {/* {isAgent && <Avatar ... />} */}
 
-                  {/* Message content */}
-                  <div
-                    className={cn(
-                      'flex',
-                      message.uid === 0 || message.uid.toString() === agentUID
-                        ? 'flex-col items-start'
-                        : 'flex-col items-end'
-                    )}
-                  >
+                    {/* Message Bubble */}
                     <div
                       className={cn(
-                        'rounded-[15px] px-3 py-2',
-                        message.uid === 0 || message.uid.toString() === agentUID
-                          ? 'bg-gray-100 text-left'
-                          : 'bg-blue-500 text-white text-right',
-                        message.status === EMessageStatus.IN_PROGRESS &&
-                          'animate-pulse'
+                        'max-w-[80%] rounded-xl px-3 py-2 text-sm md:text-base shadow-sm', // Slightly softer corners, shadow
+                        isAgent
+                          ? 'bg-gray-100 text-gray-800'
+                          : 'bg-blue-500 text-white'
                       )}
                     >
                       {message.text}
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
+              {/* Add a small spacer at the bottom */}
+              <div className="h-2"></div>
             </div>
           </div>
+          {/* Optional Footer Area (e.g., for input later) */}
+          {/* <div className="p-2 border-t shrink-0">...</div> */}
         </div>
       ) : (
+        // Floating Action Button (FAB) to open chat
         <Button
           onClick={toggleChat}
-          className="rounded-full w-12 h-12 flex items-center justify-center bg-white hover:invert hover:border-2 hover:border-black hover:scale-150 transition-all duration-300"
+          className="rounded-full w-14 h-14 flex items-center justify-center bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:scale-105 transition-all duration-200"
+          aria-label="Open chat"
         >
-          <MessageCircle className="h-6 w-6 text-black" />
+          <MessageCircle className="h-6 w-6" />
         </Button>
       )}
     </div>
@@ -617,128 +869,43 @@ export default function TextChat({
 }
 ```
 
-This component:
+This example component provides:
 
-1. **Renders a chat bubble button** when collapsed
-2. **Expands to a full chat window** when clicked
-3. **Tracks and manages scroll behavior** to provide a smooth user experience
-4. **Displays messages with appropriate styling** based on their source (user or AI)
-5. **Adds visual indicators for streaming messages**
-6. **Supports expanding/collapsing the full chat view**
+- Collapsed FAB (Floating Action Button) state.
+- Expandable chat window with smooth transitions.
+- Improved scrolling logic with debouncing.
+- Clearer styling distinctions between user and AI.
+- Basic accessibility attributes (`aria-label`, `aria-live`).
 
-The component's design and functionality allow it to work seamlessly with the MessageEngine, displaying both completed messages and real-time streaming content as it arrives from the AI.
+Remember to adapt the styling, icons (`lucide-react` used here), and specific UX behaviors to fit your application's needs.
 
-## Integrating Text Chat into Your Application
+## The Big Picture: How it Connects in the Main App
 
-To integrate the text streaming component into your application:
+Let's quickly recap the data flow within the context of the entire application:
 
-1. **Initialize the MessageEngine** with your Agora RTC client
-2. **Maintain message state** in your parent component
-3. **Render the TextChat component** with the current messages
+1.  **User Speaks / AI Generates**: Audio happens in the Agora channel. Speech-to-Text (STT) and AI processing generate transcription data.
+2.  **RTC Data Channel**: This data (user transcriptions, AI transcriptions, interrupts) is sent over the Agora RTC data channel.
+3.  **`MessageEngine` Listens**: Your initialized `MessageEngine` picks up these `stream-message` events.
+4.  **Engine Processes**: It decodes the data, manages message state (`IN_PROGRESS`, `END`, etc.), and maintains an ordered list.
+5.  **Callback Triggered**: The engine calls the callback function you provided during initialization, passing the updated `IMessageListItem[]`.
+6.  **`ConversationComponent` State Update**: Your callback function processes this list (sorts, separates in-progress) and calls `setMessageList` and `setCurrentInProgressMessage`.
+7.  **React Re-renders**: The state update triggers a re-render of `ConversationComponent`.
+8.  **`ConvoTextStream` Receives Props**: The `ConvoTextStream` component receives the fresh `messageList` and `currentInProgressMessage` as props.
+9.  **UI Updates**: `ConvoTextStream` renders the new text, applies appropriate styles (like the pulse animation), and handles scrolling.
 
-Here's how the ConversationComponent integrates TextChat:
+This cycle repeats rapidly as the conversation progresses, creating the real-time text streaming effect.
 
-```typescript
-return (
-  <div className="flex flex-col gap-6 p-4 h-full">
-    {/* Other UI components (connection status, remote users, etc.) */}
+## Where to Go Next
 
-    {/* Text chat component */}
-    <TextChat
-      messageList={messageList}
-      currentInProgressMessage={currentInProgressMessage}
-      agentUID={agentUID}
-    />
-  </div>
-);
-```
+You've now got the tools and understanding to add slick, real-time text streaming to your Agora conversational AI application! This isn't just a cosmetic addition; it significantly boosts usability and accessibility.
 
-## Styling and Customization
+**Your next steps:**
 
-### Styling Message Bubbles
+1.  **Integrate**: Drop the `MessageEngine` initialization into your `ConversationComponent` and render the `ConvoTextStream` (or your custom version).
+2.  **Customize**: Style the `ConvoTextStream` to perfectly match your app's design language. Tweak animations and scrolling behavior for the best UX.
+3.  **Test**: Try it out in different scenarios – long messages, quick interruptions, noisy environments (if testing STT).
+4.  **Refine**: Based on testing, adjust VAD settings in your backend or fine-tune the UI behavior.
 
-The TextChat component uses conditional styling to differentiate between user and AI messages:
+For deeper dives into specific Agora features related to this, check out the [Official Documentation for "Live Subtitles"](https://docs.agora.io/en/conversational-ai/develop/subtitles?platform=web), which covers the underlying data channel mechanisms.
 
-```typescript
-<div
-  className={cn(
-    'rounded-[15px] px-3 py-2',
-    message.uid === 0 || message.uid.toString() === agentUID
-      ? 'bg-gray-100 text-left'
-      : 'bg-blue-500 text-white text-right',
-    message.status === EMessageStatus.IN_PROGRESS && 'animate-pulse'
-  )}
->
-  {message.text}
-</div>
-```
-
-You can customize these styles by modifying the classes or replacing them with your own design system.
-
-### Chat Expansion States
-
-The chat supports collapsed, normal, and expanded states:
-
-```typescript
-const toggleChat = () => {
-  setIsOpen(!isOpen);
-  if (!isOpen) {
-    hasSeenFirstMessageRef.current = true;
-  }
-};
-
-const toggleChatExpanded = () => {
-  setIsChatExpanded(!isChatExpanded);
-};
-```
-
-### Streaming Animation
-
-In-progress messages have a subtle pulse animation to indicate they're still being generated:
-
-```typescript
-message.status === EMessageStatus.IN_PROGRESS && 'animate-pulse';
-```
-
-## Best Practices for Text Streaming
-
-1. **Always show progress**: Use visual indicators to show that text is being generated
-2. **Handle interruptions gracefully**: Interrupted messages should be visually distinct
-3. **Optimize for readability**: Use appropriate fonts, sizes and contrast
-4. **Respect user scroll**: Don't force scroll if the user has scrolled up to read previous messages
-5. **Support text selection**: Allow users to copy text from the conversation
-6. **Provide clear sender identification**: Visually distinguish between user and AI messages
-
-## Accessibility Considerations
-
-To ensure your text streaming component is accessible:
-
-1. **Use sufficient contrast**: Ensure text is readable against background colors
-2. **Support keyboard navigation**: Chat should be navigable without a mouse
-3. **Add ARIA labels**: For chat toggle buttons and other interactive elements
-4. **Support screen readers**: Ensure messages are properly announced
-5. **Add timestamps** (optional): For longer conversations, timestamps help with context
-
-## Troubleshooting
-
-### Common Issues
-
-1. **Messages not appearing**:
-
-   - Check if the MessageEngine is properly initialized with the RTC client
-   - Verify the callback function is updating state correctly
-
-2. **Scroll jumping issues**:
-
-   - Ensure the scroll containment and timing logic is working correctly
-   - Check for height calculation issues in the chat container
-
-3. **Performance with long conversations**:
-   - Consider implementing message pagination for very long conversations
-   - Use virtualization for large numbers of messages
-
-## Next Steps
-
-Adding text streaming to your Agora-powered conversational AI application significantly elevates the experience for your users. As you continue developing your conversational AI application with Agora customize the features and concepts to fit your use-case and refine your UI/UX based on actual usage patterns. By leveraging Agora's powerful RTC capabilities alongside this text streaming implementation, you've created an experience that feels both cutting-edge and accessible.
-
-For more details check out Agora's [Official Documentation for "Live Subtitles"](https://docs.agora.io/en/conversational-ai/develop/subtitles?platform=web).
+Happy building, and enjoy building more engaging and accessible conversational experiences!

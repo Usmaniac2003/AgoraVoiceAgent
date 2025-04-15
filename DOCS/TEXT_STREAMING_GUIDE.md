@@ -1,8 +1,10 @@
 # Let's Talk Text: Streaming Transcriptions in Your Conversational AI App
 
+![Conversation AI Client - Text Streaming Demo](../.github/assets/Conversation-Ai-Client.gif)
+
 So, you've built an amazing conversational AI app using Agora, maybe following our main [Conversational AI Guide](./GUIDE.md). Your users can chat with an AI, just like talking to a person. But what about _seeing_ the conversation? That's where text streaming comes in.
 
-This guide focuses specifically on adding real-time text transcriptions to your audio-based AI conversations. Think of it as subtitles for your AI chat.
+This guide focuses on adding real-time text transcriptions to your audio-based AI conversations. Think of it as subtitles for your AI chat.
 
 Why bother adding text when the primary interaction is voice? Good question! Here's why it's a game-changer:
 

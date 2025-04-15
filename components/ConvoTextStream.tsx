@@ -12,17 +12,17 @@ import {
 import { cn } from '@/lib/utils';
 import { IMessageListItem, EMessageStatus } from '@/lib/message';
 
-interface FloatingChatProps {
+interface ConvoTextStreamProps {
   messageList: IMessageListItem[];
   currentInProgressMessage?: IMessageListItem | null;
   agentUID: string | undefined;
 }
 
-export default function FloatingChat({
+export default function ConvoTextStream({
   messageList,
   currentInProgressMessage = null,
   agentUID,
-}: FloatingChatProps) {
+}: ConvoTextStreamProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);

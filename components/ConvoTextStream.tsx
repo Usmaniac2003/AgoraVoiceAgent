@@ -32,6 +32,24 @@ export default function ConvoTextStream({
   const [isChatExpanded, setIsChatExpanded] = useState(false);
   const hasSeenFirstMessageRef = useRef(false);
 
+  // Debug log for message detection
+  useEffect(() => {
+    if (messageList.length > 0 || currentInProgressMessage) {
+      console.log(
+        'ConvoTextStream - Messages:',
+        messageList.map((m) => ({
+          uid: m.uid,
+          text: m.text,
+          status: m.status,
+        })),
+        'Current in progress:',
+        currentInProgressMessage,
+        'Agent UID:',
+        agentUID
+      );
+    }
+  }, [messageList, currentInProgressMessage, agentUID]);
+
   // Scroll to bottom function for direct calls
   const scrollToBottom = () => {
     if (scrollRef.current) {
@@ -134,6 +152,14 @@ export default function ConvoTextStream({
     setIsChatExpanded(!isChatExpanded);
   };
 
+  // Helper to determine if message is from AI
+  const isAIMessage = (message: IMessageListItem) => {
+    // The AI should be uid=0 (agent) OR matching the agentUID if provided
+    return (
+      message.uid === 0 || (agentUID && message.uid.toString() === agentUID)
+    );
+  };
+
   // Combine complete messages with in-progress message for rendering
   const allMessages = [...messageList];
   if (shouldShowStreamingMessage() && currentInProgressMessage) {
@@ -175,30 +201,26 @@ export default function ConvoTextStream({
                   ref={index === allMessages.length - 1 ? lastMessageRef : null}
                   className={cn(
                     'flex items-start gap-2 w-full',
-                    message.uid === 0 || message.uid.toString() === agentUID
-                      ? 'flex-row'
-                      : 'flex-row-reverse'
+                    isAIMessage(message) ? 'flex-row' : 'flex-row-reverse'
                   )}
                 >
                   {/* Avatar */}
                   <div
                     className={cn(
                       'flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium',
-                      message.uid === 0 || message.uid.toString() === agentUID
+                      isAIMessage(message)
                         ? 'bg-purple-100 text-purple-700'
                         : 'bg-blue-100 text-blue-700'
                     )}
                   >
-                    {message.uid === 0 || message.uid.toString() === agentUID
-                      ? 'AI'
-                      : 'U'}
+                    {isAIMessage(message) ? 'AI' : 'U'}
                   </div>
 
                   {/* Message content */}
                   <div
                     className={cn(
                       'flex',
-                      message.uid === 0 || message.uid.toString() === agentUID
+                      isAIMessage(message)
                         ? 'flex-col items-start'
                         : 'flex-col items-end'
                     )}
@@ -206,7 +228,7 @@ export default function ConvoTextStream({
                     <div
                       className={cn(
                         'rounded-[15px] px-3 py-2',
-                        message.uid === 0 || message.uid.toString() === agentUID
+                        isAIMessage(message)
                           ? 'bg-gray-100 text-left'
                           : 'bg-blue-500 text-white text-right',
                         message.status === EMessageStatus.IN_PROGRESS &&

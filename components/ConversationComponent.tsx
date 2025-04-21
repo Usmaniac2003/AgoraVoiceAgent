@@ -51,6 +51,15 @@ export default function ConversationComponent({
     useState<IMessageListItem | null>(null);
   const messageEngineRef = useRef<MessageEngine | null>(null);
 
+  // Check if agent UID is properly set
+  useEffect(() => {
+    if (!agentUID) {
+      console.warn('NEXT_PUBLIC_AGENT_UID environment variable is not set');
+    } else {
+      console.log('Agent UID is set to:', agentUID);
+    }
+  }, [agentUID]);
+
   // Join the channel using the useJoin hook
   const { isConnected: joinSuccess } = useJoin(
     {
@@ -62,15 +71,34 @@ export default function ConversationComponent({
     true
   );
 
-  // Initialize MessageEngine when client is ready
+  // Initialize MessageEngine when client is ready and connected
   useEffect(() => {
-    if (client && !messageEngineRef.current) {
-      // Create message engine with WORD mode for better streaming
+    // Only initialize when the client is connected
+    if (!client || !isConnected) return;
+
+    // First, clean up any existing instance
+    if (messageEngineRef.current) {
+      console.log('Cleaning up existing MessageEngine instance');
+      try {
+        messageEngineRef.current.teardownInterval();
+        messageEngineRef.current.cleanup();
+      } catch (err) {
+        console.error('Error cleaning up MessageEngine:', err);
+      }
+      messageEngineRef.current = null;
+    }
+
+    console.log('Creating new MessageEngine instance with connected client');
+
+    // Create message engine with TEXT mode for better compatibility
+    try {
       const messageEngine = new MessageEngine(
         client,
-        EMessageEngineMode.AUTO,
+        EMessageEngineMode.TEXT, // Use TEXT mode for more reliable message handling
         // Callback to handle message list updates
         (updatedMessages: IMessageListItem[]) => {
+          console.log('MessageEngine update:', updatedMessages);
+
           // Sort messages by turn_id to maintain order
           const sortedMessages = [...updatedMessages].sort(
             (a, b) => a.turn_id - b.turn_id
@@ -80,6 +108,15 @@ export default function ConversationComponent({
           const inProgressMsg = sortedMessages.find(
             (msg) => msg.status === EMessageStatus.IN_PROGRESS
           );
+
+          // Debug UID issues
+          if (sortedMessages.length > 0) {
+            console.log(
+              'Message UIDs:',
+              sortedMessages.map((m) => m.uid)
+            );
+            console.log('Agent UID (for comparison):', agentUID);
+          }
 
           // Update states
           setMessageList(
@@ -92,18 +129,101 @@ export default function ConversationComponent({
       );
 
       messageEngineRef.current = messageEngine;
+
+      // Start the MessageEngine after client is connected
+      console.log('Starting MessageEngine...');
       messageEngineRef.current.run({ legacyMode: false });
-      console.log('MessageEngine initialized in WORD mode');
+      console.log('MessageEngine successfully initialized and running');
+    } catch (error) {
+      console.error('Failed to initialize MessageEngine:', error);
     }
 
+    // Cleanup on state change
     return () => {
-      // Clean up MessageEngine on component unmount
       if (messageEngineRef.current) {
-        messageEngineRef.current.cleanup();
+        console.log('Cleaning up MessageEngine on state change');
+        try {
+          messageEngineRef.current.teardownInterval();
+          messageEngineRef.current.cleanup();
+        } catch (err) {
+          console.error('Error cleaning up MessageEngine:', err);
+        }
         messageEngineRef.current = null;
       }
     };
-  }, [client]);
+  }, [client, agentUID, isConnected]); // Add isConnected dependency
+
+  // Add improved stream message handler
+  useClientEvent(client, 'stream-message', (uid, payload) => {
+    const uidStr = uid.toString();
+    const isAgentMessage = uidStr === '333'; // Use fixed value as this appears to be consistent
+
+    console.log(
+      `Received stream message from UID: ${uidStr}`,
+      isAgentMessage ? 'AGENT MESSAGE' : '',
+      `(Expected agent UID: ${agentUID})`,
+      `Payload size: ${payload.length}`
+    );
+
+    // Check if message engine is running and try to restart if needed
+    if (messageEngineRef.current) {
+      console.log('MessageEngine is initialized');
+
+      // If MessageEngine is not properly handling messages, force restart
+      // Use a flag to avoid multiple restarts
+      let needsRestart = false;
+
+      // Intercept console error messages about message service not running
+      const originalConsoleError = console.error;
+      console.error = function (...args) {
+        const errorMsg = args.join(' ');
+        if (errorMsg.includes('Message service is not running')) {
+          needsRestart = true;
+        }
+        originalConsoleError.apply(console, args);
+      };
+
+      // Try to use the message engine to handle the message
+      try {
+        if (isAgentMessage) {
+          messageEngineRef.current.handleStreamMessage(payload);
+          console.log('Processed agent message through MessageEngine');
+        }
+      } catch (error) {
+        console.error('Error processing stream message:', error);
+        needsRestart = true;
+      }
+
+      // Restore original console.error
+      console.error = originalConsoleError;
+
+      // If needed, restart the message engine after a short delay
+      if (needsRestart) {
+        setTimeout(() => {
+          console.log('Attempting to restart MessageEngine...');
+          try {
+            messageEngineRef.current?.run({ legacyMode: false });
+            console.log('MessageEngine restarted successfully');
+          } catch (error) {
+            console.error('Failed to restart MessageEngine:', error);
+          }
+        }, 50);
+      }
+    } else {
+      console.error('MessageEngine not initialized!');
+    }
+
+    // Check if this is likely the agent but UID doesn't match expected
+    if (isAgentMessage && uidStr !== agentUID) {
+      console.warn(
+        `Possible agent UID mismatch. Message from: ${uidStr}, Expected: ${agentUID}`
+      );
+      // Update environment config if needed
+      console.info(
+        `You may need to set NEXT_PUBLIC_AGENT_UID=${uidStr} in your .env file`
+      );
+    }
+  });
 
   // Update actualUID when join is successful
   useEffect(() => {
@@ -255,6 +375,33 @@ export default function ConversationComponent({
 
   // Add token observer
   useClientEvent(client, 'token-privilege-will-expire', handleTokenWillExpire);
+
+  // Debug remote users to ensure we have the right agent UID
+  useEffect(() => {
+    if (remoteUsers.length > 0) {
+      console.log(
+        'Remote users detected:',
+        remoteUsers.map((u) => u.uid)
+      );
+      console.log('Current NEXT_PUBLIC_AGENT_UID:', agentUID);
+
+      // If we see UIDs that don't match our expected agent UID
+      const potentialAgents = remoteUsers.map((u) => u.uid.toString());
+      if (agentUID && !potentialAgents.includes(agentUID)) {
+        console.warn(
+          'Agent UID mismatch! Expected:',
+          agentUID,
+          'Available users:',
+          potentialAgents
+        );
+        console.info(
+          `Consider updating NEXT_PUBLIC_AGENT_UID to one of: ${potentialAgents.join(
+            ', '
+          )}`
+        );
+      }
+    }
+  }, [remoteUsers, agentUID]);
 
   return (
     <div className="flex flex-col gap-6 p-4 h-full">

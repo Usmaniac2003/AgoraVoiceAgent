@@ -121,7 +121,7 @@ export default function LandingPage() {
     <div className="min-h-screen flex flex-col items-center justify-center bg-gray-900 text-white relative overflow-hidden">
       <ParticleBackground />
       <div className="z-10 text-center">
-        <h1 className="text-4xl font-bold mb-6">Converse</h1>
+        <h1 className="text-4xl font-bold mb-6">Brain Buddy</h1>
         <p className="text-lg mb-6">
           When was the last time you had an intelligent conversation?
         </p>
@@ -130,8 +130,8 @@ export default function LandingPage() {
             <button
               onClick={handleStartConversation}
               disabled={isLoading}
-              className="px-8 py-3 bg-blue-600/80 text-white rounded-full border border-blue-400/30 backdrop-blur-sm 
-              hover:bg-blue-700/90 transition-all shadow-lg hover:shadow-blue-500/20 
+              className="px-8 py-3 bg-yellow-600/80 text-white rounded-full border border-yellow-400/30 backdrop-blur-sm 
+              hover:bg-yellow-700/90 transition-all shadow-lg hover:shadow-yellow-500/20 
               disabled:opacity-50 disabled:cursor-not-allowed text-lg font-medium"
             >
               {isLoading ? 'Starting...' : 'Start Conversation'}

@@ -17,7 +17,7 @@ export default function ParticleBackground() {
       options={{
         background: {
           color: {
-            value: 'transparent',
+            value: '#800080', // 💜 Purple background
           },
         },
         fpsLimit: 120,
@@ -45,7 +45,7 @@ export default function ParticleBackground() {
         },
         particles: {
           color: {
-            value: '#ffffff',
+            value: '#FFFF00', // 💛 Yellow particles
           },
           links: {
             color: '#ffffff',
@@ -87,4 +87,3 @@ export default function ParticleBackground() {
     />
   )
 }
-

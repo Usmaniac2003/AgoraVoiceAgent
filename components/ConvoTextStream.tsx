@@ -210,7 +210,7 @@ export default function ConvoTextStream({
                       'flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium',
                       isAIMessage(message)
                         ? 'bg-purple-100 text-purple-700'
-                        : 'bg-blue-100 text-blue-700'
+                        : 'bg-yellow-100 text-yellow-700'
                     )}
                   >
                     {isAIMessage(message) ? 'AI' : 'U'}
@@ -230,7 +230,7 @@ export default function ConvoTextStream({
                         'rounded-[15px] px-3 py-2',
                         isAIMessage(message)
                           ? 'bg-gray-100 text-left'
-                          : 'bg-blue-500 text-white text-right',
+                          : 'bg-yellow-500 text-white text-right',
                         message.status === EMessageStatus.IN_PROGRESS &&
                           'animate-pulse'
                       )}

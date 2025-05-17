@@ -422,8 +422,8 @@ export default function ConversationComponent({
             <button
               onClick={handleStartConversation}
               disabled={isConnecting}
-              className="px-4 py-2 bg-blue-500/80 text-white rounded-full border border-blue-400/30 backdrop-blur-sm 
-              hover:bg-blue-600/90 transition-all shadow-lg hover:shadow-blue-500/20 
+              className="px-4 py-2 bg-yellow-500/80 text-white rounded-full border border-yellow-400/30 backdrop-blur-sm 
+              hover:bg-yellow-600/90 transition-all shadow-lg hover:shadow-yellow-500/20 
               disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
             >
               {isConnecting ? 'Connecting with agent...' : 'Connect Agent'}

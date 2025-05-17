@@ -144,7 +144,7 @@ export default function LandingPage() {
 
         {/* Placeholder for our start conversation button */}
         <div className="flex justify-center mb-8">
-          <button className="px-6 py-3 bg-blue-600 text-white rounded-lg">
+          <button className="px-6 py-3 bg-yellow-600 text-white rounded-lg">
             Start Conversation
           </button>
         </div>
@@ -523,7 +523,7 @@ export default function LandingPage() {
             <button
               onClick={handleStartConversation}
               disabled={isLoading}
-              className="px-6 py-3 bg-blue-600 text-white rounded-lg disabled:opacity-50"
+              className="px-6 py-3 bg-yellow-600 text-white rounded-lg disabled:opacity-50"
             >
               {isLoading ? 'Starting...' : 'Start Conversation'}
             </button>
@@ -1238,7 +1238,7 @@ export default function LandingPage() {
               <button
                 onClick={handleStartConversation}
                 disabled={isLoading}
-                className="px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg disabled:opacity-50 transition-all"
+                className="px-8 py-3 bg-yellow-600 hover:bg-yellow-700 text-white rounded-full shadow-lg disabled:opacity-50 transition-all"
               >
                 {isLoading ? 'Starting...' : 'Start Conversation'}
               </button>
@@ -1491,8 +1491,8 @@ export default function ConversationComponent({
           <button
             onClick={handleStartConversation}
             disabled={isConnecting}
-            className="px-4 py-2 bg-blue-500/80 text-white rounded-full border border-blue-400/30 backdrop-blur-sm 
-            hover:bg-blue-600/90 transition-all shadow-lg 
+            className="px-4 py-2 bg-yellow-500/80 text-white rounded-full border border-yellow-400/30 backdrop-blur-sm 
+            hover:bg-yellow-600/90 transition-all shadow-lg 
             disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
           >
             {isConnecting ? 'Connecting...' : 'Connect Agent'}
@@ -1669,7 +1669,7 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ track }) => {
             ref={(el) => {
               barsRef.current[index] = el;
             }}
-            className="w-3 bg-gradient-to-t from-blue-500 via-purple-500 to-pink-500 rounded-full transition-all duration-75"
+            className="w-3 bg-gradient-to-t from-yellow-500 via-purple-500 to-pink-500 rounded-full transition-all duration-75"
             style={{
               height: '2px',
               minHeight: '2px',
